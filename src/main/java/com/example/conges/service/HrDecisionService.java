@@ -3,12 +3,16 @@ package com.example.conges.service;
 import com.example.conges.dto.DemandeCongeResponse;
 import com.example.conges.dto.hr.HrDecisionRequest;
 import com.example.conges.dto.hr.HrLeaveRequestResponse;
+import com.example.conges.entity.ApprovalDecision;
+import com.example.conges.entity.DemandeApproval;
 import com.example.conges.entity.DemandeConge;
 import com.example.conges.entity.Role;
 import com.example.conges.entity.StatutConge;
 import com.example.conges.entity.UserEntity;
+import com.example.conges.repository.DemandeApprovalRepository;
 import com.example.conges.repository.DemandeCongeRepository;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -24,6 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class HrDecisionService {
 
     private final DemandeCongeRepository demandeCongeRepository;
+    private final DemandeApprovalRepository demandeApprovalRepository;
     private final CongeService congeService;
     private final CountryPolicyService countryPolicyService;
 
@@ -106,6 +111,9 @@ public class HrDecisionService {
         enforceCountryAccess(actor, demande);
         boolean approve = parseDecision(request.getAction());
         String comment = request.getComment() == null ? null : request.getComment().trim();
+        if (!approve && (comment == null || comment.isBlank())) {
+            throw new IllegalArgumentException("Le motif de rejet est obligatoire.");
+        }
         return congeService.validerDemande(demandeId, actor.getId(), approve, comment);
     }
 
@@ -208,9 +216,30 @@ public class HrDecisionService {
         return countryPolicyService.normalizeBusinessCountry(value);
     }
 
+    private DemandeApproval lastApprovedEntry(Long demandeId) {
+        DemandeApproval last = null;
+        for (DemandeApproval a : demandeApprovalRepository.findByDemandeIdOrderByStepOrderAscDecisionDateAsc(demandeId)) {
+            if (a.getDecision() == ApprovalDecision.APPROVED) {
+                last = a;
+            }
+        }
+        return last;
+    }
+
     private HrLeaveRequestResponse toHrResponse(DemandeConge d) {
         UserEntity u = d.getUser();
-        UserEntity ap = d.getApprovedBy();
+        UserEntity approver = d.getApprovedBy();
+        LocalDateTime dateDecision = d.getDateTraitement();
+
+        if (approver == null && d.getStatut() != StatutConge.EN_ATTENTE) {
+            DemandeApproval fallback = lastApprovedEntry(d.getId());
+            if (fallback != null) {
+                approver = fallback.getActor();
+                if (dateDecision == null) {
+                    dateDecision = fallback.getDecisionDate();
+                }
+            }
+        }
         return HrLeaveRequestResponse.builder()
                 .id(d.getId())
                 .typeConge(d.getTypeConge())
@@ -224,6 +253,7 @@ public class HrDecisionService {
                 .motif(d.getMotif())
                 .commentaireRh(d.getCommentaireRh())
                 .dateSoumission(d.getDateSoumission())
+                .dateDecision(dateDecision)
                 .workflowCode(d.getWorkflowCode())
                 .currentStepOrder(d.getCurrentStepOrder())
                 .currentStepType(d.getCurrentStepType() == null ? null : d.getCurrentStepType().name())
@@ -235,11 +265,11 @@ public class HrDecisionService {
                         .country(u.getPays())
                         .department(u.getDepartement())
                         .build())
-                .approuvePar(ap == null ? null : HrLeaveRequestResponse.ApproverInfo.builder()
-                        .id(ap.getId())
-                        .nom(ap.getNom())
-                        .prenom(ap.getPrenom())
-                        .email(ap.getEmail())
+                .approuvePar(approver == null ? null : HrLeaveRequestResponse.ApproverInfo.builder()
+                        .id(approver.getId())
+                        .nom(approver.getNom())
+                        .prenom(approver.getPrenom())
+                        .email(approver.getEmail())
                         .build())
                 .build();
     }

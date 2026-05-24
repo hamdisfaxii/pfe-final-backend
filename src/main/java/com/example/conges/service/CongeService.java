@@ -18,6 +18,8 @@ import com.example.conges.repository.ExceptionalLeaveConfigRepository;
 import com.example.conges.repository.JoursPrisParTypeProjection;
 import com.example.conges.repository.UserRepository;
 import javax.persistence.EntityNotFoundException;
+import java.io.File;
+import java.io.IOException;
 import java.text.Normalizer;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -33,12 +35,14 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.time.LocalDate;
 import org.springframework.util.StringUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 /**
  * Cycle de vie des demandes de congé et exposition des soldes à l’UI.
@@ -70,6 +74,7 @@ public class CongeService {
     private final NotificationService notificationService;
     private final HrLeaveBalanceService hrLeaveBalanceService;
     private final ExceptionalLeaveConfigRepository exceptionalLeaveConfigRepository;
+    private final HrHolidayService hrHolidayService;
 
     @Transactional
     public DemandeCongeResponse creerDemande(Long userId, DemandeCongeRequest request) {
@@ -102,6 +107,9 @@ public class CongeService {
         if (type == TypeConge.COURTE_DUREE && fr && !countryPolicyService.isRttEnabledForCountry(user.getPays())) {
             throw new IllegalArgumentException("Les autorisations courtes sont désactivées pour votre pays.");
         }
+
+        Set<LocalDate> holidays = hrHolidayService.getActiveHolidayDates(
+                paysNorm, request.getDateDebut(), request.getDateFin());
 
         DemandeConge demande;
 
@@ -178,7 +186,8 @@ public class CongeService {
                             request.getDateDebut(),
                             request.getDateFin(),
                             request.getStartHalfDay(),
-                            request.getEndHalfDay());
+                            request.getEndHalfDay(),
+                            holidays);
                     if (joursExact <= 0d) {
                         throw new IllegalArgumentException("Aucun jour ouvrable dans la période choisie");
                     }
@@ -205,7 +214,8 @@ public class CongeService {
                     request.getDateDebut(),
                     request.getDateFin(),
                     request.getStartHalfDay(),
-                    request.getEndHalfDay());
+                    request.getEndHalfDay(),
+                    holidays);
             if (joursExact <= 0d) {
                 throw new IllegalArgumentException("Aucun jour ouvrable dans la période choisie");
             }
@@ -242,10 +252,27 @@ public class CongeService {
 
         historyService.recordCreation(user, saved);
 
+        // Email de confirmation à l'employé
+        notificationService.notifyDemandeCreated(user, saved);
+
         // Email aux Super Admins à la création (anti-doublon via History)
         notifySuperAdminsOnCreate(user, saved, approvedBy);
 
+        // Email à l'approbateur désigné dans « Approuvé par »
+        notifyApproverOnCreate(user, saved, approvedBy);
+
         return toResponse(saved);
+    }
+
+    private void notifyApproverOnCreate(UserEntity requester, DemandeConge demande, UserEntity approvedBy) {
+        if (approvedBy == null || !org.springframework.util.StringUtils.hasText(approvedBy.getEmail())) {
+            return;
+        }
+        try {
+            notificationService.notifyPendingApproval(approvedBy, demande, requester);
+        } catch (RuntimeException ex) {
+            log.warn("SMTP : notification approbateur non envoyée pour la demande {} : {}", demande.getId(), ex.getMessage());
+        }
     }
 
     private DemandeConge buildExceptionalLeaveDemande(UserEntity user, DemandeCongeRequest request, String paysNorm) {
@@ -262,11 +289,14 @@ public class CongeService {
         if (!Boolean.TRUE.equals(cfg.getEnabled())) {
             throw new IllegalArgumentException("Ce congé exceptionnel est désactivé.");
         }
+        Set<LocalDate> holidays = hrHolidayService.getActiveHolidayDates(
+                paysNorm, request.getDateDebut(), request.getDateFin());
         double joursExact = DemandeConge.calculerJoursOuvrablesExact(
                 request.getDateDebut(),
                 request.getDateFin(),
                 request.getStartHalfDay(),
-                request.getEndHalfDay());
+                request.getEndHalfDay(),
+                holidays);
         if (joursExact <= 0d) {
             throw new IllegalArgumentException("Aucun jour ouvrable dans la période choisie");
         }
@@ -314,10 +344,14 @@ public class CongeService {
 
     private void notifySuperAdminsOnCreate(UserEntity requester, DemandeConge demande, UserEntity approvedBy) {
         try {
+            // L'approbateur reçoit déjà notifyPendingApproval — on l'exclut ici pour éviter le doublon.
+            String approverEmail = (approvedBy != null && approvedBy.getEmail() != null)
+                    ? approvedBy.getEmail().trim().toLowerCase() : null;
             List<UserEntity> admins = userRepository.findByRole(Role.ADMIN);
             List<String> recipients = (admins == null ? List.<UserEntity>of() : admins).stream()
                     .map(UserEntity::getEmail)
                     .filter(e -> e != null && !e.isBlank())
+                    .filter(e -> approverEmail == null || !e.trim().toLowerCase().equals(approverEmail))
                     .distinct()
                     .toList();
             if (recipients.isEmpty()) return;
@@ -352,7 +386,11 @@ public class CongeService {
         DemandeConge saved = demandeCongeRepository.save(demande);
         
         log.info("Demande id={} annulée par userId={}", demandeId, userId);
-        
+        if (saved.getDolibarrLeaveRequestId() != null) {
+            log.warn("Demande id={} annulée mais non synchronisée dans Dolibarr (dolibarrId={}). À annuler manuellement dans Dolibarr si besoin.",
+                    demandeId, saved.getDolibarrLeaveRequestId());
+        }
+
         // Enregistrer l'annulation dans l'historique
         historyService.recordCancellation(user, saved, "Demande annulée par l'employé");
         
@@ -714,10 +752,6 @@ public class CongeService {
         if (type == TypeConge.COURTE_DUREE
                 && "FR".equals(countryPolicyService.normalizeBusinessCountry(user.getPays()))
                 && countryPolicyService.isRttEnabledForCountry(user.getPays())) {
-            if (!user.isContractActive()) {
-                throw new IllegalStateException(
-                        "Contrat suspendu : aucune autorisation courte (RTT) ne peut être prise tant que le contrat n’est pas réactivé.");
-            }
             if (franceRttLedgerService.governsFranceCourteRequests(user)) {
                 franceRttLedgerService.assertSufficientFranceCourteExact(
                         user, Year.now().getValue(), LocalDate.now(), joursDemandesExact);
@@ -914,12 +948,13 @@ public class CongeService {
 
         // Demande acceptée : on répercute les quantités vers Dolibarr (stockage ERP) — le débit métier est déjà calculé ici
         if (saved.getStatut() == StatutConge.ACCEPTE) {
-            boolean synced = dolibarrService.syncApprovedLeave(saved);
-            historyService.recordDolibarrSync(
-                    saved.getUser(),
-                    saved,
-                    synced ? "ALLOCATION_UPDATED" : "ALLOCATION_UPDATE_FAILED"
-            );
+            try {
+                boolean synced = dolibarrService.syncApprovedLeave(saved);
+                historyService.recordDolibarrSync(saved.getUser(), saved, synced ? "ALLOCATION_UPDATED" : "ALLOCATION_UPDATE_FAILED");
+            } catch (Exception ex) {
+                log.warn("Sync Dolibarr/RTT non appliquée pour demande id={} : {}", saved.getId(), ex.getMessage());
+                historyService.recordDolibarrSync(saved.getUser(), saved, "ALLOCATION_UPDATE_FAILED");
+            }
         }
         
         // Enregistrer la validation dans l'historique
@@ -985,6 +1020,25 @@ public class CongeService {
         return StatistiquesRhResponse.builder()
                 .nombreParStatut(nombreParStatut)
                 .build();
+    }
+
+    /** Stocke un fichier justificatif sur disque et met à jour le nom sur la demande. */
+    @Transactional
+    public Map<String, Object> saveAttachment(Long demandeId, Long userId, MultipartFile file) throws IOException {
+        DemandeConge demande = demandeCongeRepository.findById(demandeId)
+                .orElseThrow(() -> new EntityNotFoundException("Demande introuvable"));
+        if (!demande.getUser().getId().equals(userId)) {
+            throw new AccessDeniedException("Accès refusé");
+        }
+        String uploadsDir = System.getProperty("user.home") + "/conges-uploads/";
+        new File(uploadsDir).mkdirs();
+        String safe = file.getOriginalFilename() != null
+                ? file.getOriginalFilename().replaceAll("[^a-zA-Z0-9._-]", "_") : "file";
+        String filename = "demande_" + demandeId + "_" + System.currentTimeMillis() + "_" + safe;
+        file.transferTo(new File(uploadsDir + filename));
+        demande.setPieceJointeNom(filename);
+        demandeCongeRepository.save(demande);
+        return Map.of("message", "Pièce jointe enregistrée", "filename", filename);
     }
 
     private static int safeDays(Double value) {

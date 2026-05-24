@@ -4,11 +4,13 @@ import com.example.conges.dto.ApiErrorResponse;
 import javax.persistence.EntityNotFoundException;
 import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.transaction.TransactionSystemException;
+import org.springframework.transaction.UnexpectedRollbackException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
@@ -78,6 +80,37 @@ public class GlobalExceptionHandler {
                 .body(new ApiErrorResponse(false,
                         "Enregistrement refusé par la base (contrainte ou schéma obsolète). "
                                 + "Vérifiez les migrations / JPA ddl-auto et les logs serveur."));
+    }
+
+    /**
+     * Tous les sous-types DataAccessException non déjà gérés (JpaSystemException, BadSqlGrammarException, etc.)
+     * — souvent causés par un schéma désynchronisé ou un enum invalide en base.
+     */
+    @ExceptionHandler(DataAccessException.class)
+    public ResponseEntity<ApiErrorResponse> handleDataAccess(DataAccessException ex) {
+        Throwable cause = ex.getMostSpecificCause();
+        log.error("DataAccessException [{}]: {}", ex.getClass().getSimpleName(),
+                cause != null ? cause.getMessage() : ex.getMessage(), ex);
+        return ResponseEntity
+                .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(new ApiErrorResponse(false,
+                        "Erreur de base de données [" + ex.getClass().getSimpleName() + "]. Consultez les logs serveur."));
+    }
+
+    /**
+     * Transaction marquée pour rollback par une méthode interne @Transactional avant que l'appelant puisse s'en rendre compte.
+     * Retourne 409 plutôt que 500 pour éviter un message opaque.
+     */
+    @ExceptionHandler(UnexpectedRollbackException.class)
+    public ResponseEntity<ApiErrorResponse> handleUnexpectedRollback(UnexpectedRollbackException ex) {
+        Throwable cause = ex.getMostSpecificCause();
+        String message = cause != null && cause.getMessage() != null && !cause.getMessage().isBlank()
+                ? cause.getMessage()
+                : "Opération impossible : la transaction a été annulée.";
+        log.warn("UnexpectedRollbackException: {}", message);
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(new ApiErrorResponse(false, message));
     }
 
     /**

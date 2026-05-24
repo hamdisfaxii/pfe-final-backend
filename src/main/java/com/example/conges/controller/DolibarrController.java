@@ -29,6 +29,9 @@ import org.springframework.web.bind.annotation.RestController;
 @PreAuthorize("hasRole('ADMIN') or hasRole('RH') or @environment.acceptsProfiles('dev')")
 public class DolibarrController {
 
+    private static final String KEY_SUCCESS = "success";
+    private static final String KEY_MESSAGE = "message";
+
     private final DolibarrService dolibarrService;
     private final DolibarrSyncService dolibarrSyncService;
     private final DolibarrApiClient dolibarrApiClient;
@@ -89,8 +92,8 @@ public class DolibarrController {
         int syncCount = dolibarrService.syncEmployeesFromDolibarr();
         
         return ResponseEntity.ok(Map.of(
-                "success", true,
-                "message", "Synchronisation Dolibarr complétée",
+                KEY_SUCCESS, true,
+                KEY_MESSAGE, "Synchronisation Dolibarr complétée",
                 "employesSynced", syncCount
         ));
     }
@@ -105,14 +108,14 @@ public class DolibarrController {
         
         if (synced == null) {
             return ResponseEntity.badRequest().body(Map.of(
-                    "success", false,
-                    "message", "Employé non trouvé sur Dolibarr: " + email
+                    KEY_SUCCESS, false,
+                    KEY_MESSAGE, "Employé non trouvé sur Dolibarr: " + email
             ));
         }
         
         return ResponseEntity.ok(Map.of(
-                "success", true,
-                "message", "Employé synchronisé avec succès",
+                KEY_SUCCESS, true,
+                KEY_MESSAGE, "Employé synchronisé avec succès",
                 "employee", Map.of(
                         "id", synced.getId(),
                         "email", synced.getEmail(),
@@ -141,15 +144,11 @@ public class DolibarrController {
     public ResponseEntity<Map<String, Object>> dolibarrDbHolidayUsersCount() {
         try {
             long count = dolibarrService.dolibarrDbHolidayUsersCount();
-            return ResponseEntity.ok(Map.of("success", true, "count", count));
+            return ResponseEntity.ok(Map.of(KEY_SUCCESS, true, "count", count));
         } catch (RuntimeException ex) {
-            return ResponseEntity.ok(Map.of("success", false, "error", ex.getMessage()));
+            return ResponseEntity.ok(Map.of(KEY_SUCCESS, false, "error", ex.getMessage()));
         }
     }
-
-    // ============================================
-    // Nouveau : Synchronisation COMPLÈTE
-    // ============================================
 
     /**
      * POST /api/dolibarr/sync-all
@@ -163,8 +162,8 @@ public class DolibarrController {
         
         if (response.isSuccess()) {
             return ResponseEntity.ok(Map.of(
-                    "success", true,
-                    "message", response.getMessage(),
+                    KEY_SUCCESS, true,
+                    KEY_MESSAGE, response.getMessage(),
                     "data", Map.of(
                             "employeesSynced", response.getEmployeesSynced(),
                             "leaveTypesSynced", response.getLeaveTypesSynced(),
@@ -174,8 +173,8 @@ public class DolibarrController {
             ));
         } else {
             return ResponseEntity.badRequest().body(Map.of(
-                    "success", false,
-                    "message", response.getMessage()
+                    KEY_SUCCESS, false,
+                    KEY_MESSAGE, response.getMessage()
             ));
         }
     }
@@ -215,8 +214,8 @@ public class DolibarrController {
         int syncCount = dolibarrSyncService.syncLeaveTypes();
         
         return ResponseEntity.ok(Map.of(
-                "success", true,
-                "message", "Types de congés synchronisés",
+                KEY_SUCCESS, true,
+                KEY_MESSAGE, "Types de congés synchronisés",
                 "leaveTypesSynced", syncCount
         ));
     }
@@ -240,8 +239,8 @@ public class DolibarrController {
         int syncCount = dolibarrSyncService.syncHolidays();
         
         return ResponseEntity.ok(Map.of(
-                "success", true,
-                "message", "Jours fériés synchronisés",
+                KEY_SUCCESS, true,
+                KEY_MESSAGE, "Jours fériés synchronisés",
                 "holidaysSynced", syncCount
         ));
     }
@@ -266,8 +265,8 @@ public class DolibarrController {
         int syncCount = dolibarrSyncService.syncLeaveAllocations();
         
         return ResponseEntity.ok(Map.of(
-                "success", true,
-                "message", "Allocations de congés synchronisées",
+                KEY_SUCCESS, true,
+                KEY_MESSAGE, "Allocations de congés synchronisées",
                 "allocationsSynced", syncCount
         ));
     }

@@ -7,7 +7,6 @@ import com.example.conges.repository.UserRepository;
 import com.example.conges.service.JwtService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Profile;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -42,7 +41,6 @@ public class DevController {
 
         UserEntity user = userRepository.findByEmail(email)
                 .orElseGet(() -> {
-                    // Create test user if not exists
                     UserEntity newUser = UserEntity.builder()
                             .email(email)
                             .nom("Test")
@@ -70,6 +68,7 @@ public class DevController {
                         .prenom(user.getPrenom())
                         .role(user.getRole())
                         .pays(user.getPays())
+                        .departement(user.getDepartement())
                         .build())
                 .build());
     }

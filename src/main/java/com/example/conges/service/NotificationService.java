@@ -22,6 +22,8 @@ import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 
 /**
  * Service pour gérer les notifications par email
@@ -39,6 +41,11 @@ public class NotificationService {
     private final JavaMailSender mailSender;
     @Qualifier("freemarkerConfiguration")
     private final Configuration freemarkerConfig;
+    private final JwtService jwtService;
+
+    // Auto-injection pour contourner la limitation @Async sur appels internes (self-invocation).
+    @Autowired @Lazy
+    private NotificationService self;
 
     @Value("${app.notification.from.email}")
     private String fromEmail;
@@ -52,8 +59,14 @@ public class NotificationService {
     @Value("${app.notification.async}")
     private boolean asyncNotification;
 
+    @Value("${app.notification.to.override:}")
+    private String toOverride;
+
     @Value("${app.url:http://localhost:5175}")
     private String appUrl;
+
+    @Value("${app.backend.url:http://localhost:8080}")
+    private String backendUrl;
 
     private static final DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
@@ -79,7 +92,7 @@ public class NotificationService {
                 .templateName("demande-created")
                 .build()
                 .addVariable("userName", user.getPrenom() + " " + user.getNom())
-                .addVariable("typeConge", demande.getTypeConge().toString())
+                .addVariable("typeConge", libelleTypeConge(demande.getTypeConge(), demande.getUser()))
                 .addVariable("dateDebut", demande.getDateDebut().format(dateFormatter))
                 .addVariable("dateFin", demande.getDateFin().format(dateFormatter))
                 .addVariable("nombreJours", demande.getNombreJoursExactOrInt())
@@ -104,7 +117,7 @@ public class NotificationService {
                 .build()
                 .addVariable("userName", user.getPrenom() + " " + user.getNom())
                 .addVariable("approverName", approverName)
-                .addVariable("typeConge", demande.getTypeConge().toString())
+                .addVariable("typeConge", libelleTypeConge(demande.getTypeConge(), demande.getUser()))
                 .addVariable("dateDebut", demande.getDateDebut().format(dateFormatter))
                 .addVariable("dateFin", demande.getDateFin().format(dateFormatter))
                 .addVariable("nombreJours", demande.getNombreJours());
@@ -126,7 +139,7 @@ public class NotificationService {
                 .templateName("demande-rejected")
                 .build()
                 .addVariable("userName", user.getPrenom() + " " + user.getNom())
-                .addVariable("typeConge", demande.getTypeConge().toString())
+                .addVariable("typeConge", libelleTypeConge(demande.getTypeConge(), demande.getUser()))
                 .addVariable("dateDebut", demande.getDateDebut().format(dateFormatter))
                 .addVariable("dateFin", demande.getDateFin().format(dateFormatter))
                 .addVariable("reason", reason);
@@ -142,6 +155,9 @@ public class NotificationService {
             return;
         }
 
+        String approveToken = jwtService.generateApprovalToken(demande.getId(), approver.getId(), "APPROVE");
+        String rejectToken  = jwtService.generateApprovalToken(demande.getId(), approver.getId(), "REJECT");
+
         EmailNotificationDto email = EmailNotificationDto.builder()
                 .to(approver.getEmail())
                 .subject("Nouvelle demande de congé à approuver")
@@ -149,11 +165,15 @@ public class NotificationService {
                 .build()
                 .addVariable("approverName", approver.getPrenom() + " " + approver.getNom())
                 .addVariable("requesterName", requester.getPrenom() + " " + requester.getNom())
-                .addVariable("typeConge", demande.getTypeConge().toString())
+                .addVariable("typeConge", libelleTypeConge(demande.getTypeConge(), demande.getUser()))
                 .addVariable("dateDebut", demande.getDateDebut().format(dateFormatter))
                 .addVariable("dateFin", demande.getDateFin().format(dateFormatter))
                 .addVariable("nombreJours", demande.getNombreJours())
-                .addVariable("motif", demande.getMotif());
+                .addVariable("motif", demande.getMotif())
+                .addVariable("demandeId", demande.getId())
+                .addVariable("approveToken", approveToken)
+                .addVariable("rejectToken", rejectToken)
+                .addVariable("backendUrl", backendUrl);
 
         sendEmailNotification(email);
     }
@@ -202,7 +222,7 @@ public class NotificationService {
      */
     public void sendEmailNotification(EmailNotificationDto emailDto) {
         if (asyncNotification) {
-            sendEmailAsync(emailDto);
+            self.sendEmailAsync(emailDto); // via proxy Spring pour que @Async soit effectif
         } else {
             sendEmailSync(emailDto);
         }
@@ -226,8 +246,12 @@ public class NotificationService {
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
 
+            // Redirection dev : si MAIL_TO_OVERRIDE est défini, tous les emails vont vers cette adresse.
+            String effectiveTo = (toOverride != null && !toOverride.isBlank())
+                    ? toOverride : emailDto.getTo();
+
             helper.setFrom(fromEmail, fromName);
-            helper.setTo(emailDto.getTo());
+            helper.setTo(effectiveTo);
             helper.setSubject(emailDto.getSubject());
             helper.setText(htmlContent, true); // true pour HTML
 
@@ -286,7 +310,7 @@ public class NotificationService {
         Map<String, Object> vars = new HashMap<>();
         vars.put("requesterName", (requester.getPrenom() + " " + requester.getNom()).trim());
         vars.put("requesterEmail", requester.getEmail());
-        vars.put("typeConge", String.valueOf(demande.getTypeConge()));
+        vars.put("typeConge", libelleTypeConge(demande.getTypeConge(), requester));
         vars.put("dateDebut", demande.getDateDebut() != null ? demande.getDateDebut().format(dateFormatter) : "");
         vars.put("dateFin", demande.getDateFin() != null ? demande.getDateFin().format(dateFormatter) : "");
         vars.put("nombreJours", demande.getNombreJours());
@@ -300,6 +324,21 @@ public class NotificationService {
                 "superadmin-new-request",
                 vars
         );
+    }
+
+    private String libelleTypeConge(com.example.conges.entity.TypeConge typeConge, UserEntity user) {
+        if (typeConge == null) return "";
+        if (typeConge == com.example.conges.entity.TypeConge.COURTE_DUREE) {
+            String pays = user != null ? user.getPays() : null;
+            if (pays != null) {
+                String upper = pays.trim().toUpperCase();
+                if ("FR".equals(upper) || upper.contains("FRANC")) {
+                    return "RTT";
+                }
+            }
+            return "Sortie courte durée";
+        }
+        return typeConge.getLibelle();
     }
 
     /**

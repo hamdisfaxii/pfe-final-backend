@@ -52,6 +52,11 @@ public interface DemandeCongeRepository extends JpaRepository<DemandeConge, Long
     long countByStatut(StatutConge statut);
     long countByStatutAndUser_PaysIgnoreCase(StatutConge statut, String pays);
 
+    @Query("SELECT COUNT(d) FROM DemandeConge d WHERE d.user.id = :userId AND d.dateSoumission >= :since AND d.statut <> :exclu")
+    long countRecentByUser(@Param("userId") Long userId,
+                           @Param("since") java.time.LocalDateTime since,
+                           @Param("exclu") StatutConge exclu);
+
     @Query("""
             SELECT COUNT(d)
             FROM DemandeConge d

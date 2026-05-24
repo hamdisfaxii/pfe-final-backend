@@ -70,6 +70,10 @@ public class UserEntity {
     @Column(name = "departement")
     private String departement;
 
+    /** Mot de passe hashé BCrypt — utilisé uniquement quand Dolibarr n'est pas configuré. */
+    @Column(name = "password_hash", length = 255)
+    private String passwordHash;
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

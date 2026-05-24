@@ -17,3 +17,7 @@ CREATE TABLE IF NOT EXISTS demande_attachments (
     INDEX idx_demande_attach_demande (demande_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+
+-- Fix: dolibarr_allocation_id doit être nullable (allocations manuelles RH sans ID Dolibarr)
+ALTER TABLE employee_leave_allocations 
+    MODIFY COLUMN dolibarr_allocation_id BIGINT NULL;

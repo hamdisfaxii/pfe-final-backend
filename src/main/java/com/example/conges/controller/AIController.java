@@ -22,10 +22,6 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Controller REST pour les services IA
- * Endpoints pour suggestions de dates et détection de conflits
- */
 @RestController
 @RequestMapping("/api/ai")
 @RequiredArgsConstructor
@@ -35,17 +31,6 @@ public class AIController {
 
     private final AIService aiService;
 
-    /**
-     * GET /api/ai/suggest-dates
-     * Suggère les 5 meilleures dates pour prendre un congé
-     * 
-     * Query params:
-     * - userId: ID de l'utilisateur
-     * - typeConge: Type de congé (PAYE, MALADIE, etc.)
-     * - days: Nombre de jours demandés
-     * - startDate: Date de début de recherche (ISO format)
-     * - endDate: Date de fin de recherche (ISO format)
-     */
     @GetMapping("/suggest-dates")
     @PreAuthorize("isAuthenticated()")
     @Operation(summary = "Suggère les meilleures dates pour un congé",
@@ -78,16 +63,6 @@ public class AIController {
         return ResponseEntity.ok(suggestions);
     }
 
-    /**
-     * GET /api/ai/detect-conflicts
-     * Détecte les conflits potentiels pour une demande de congé
-     * 
-     * Query params:
-     * - userId: ID de l'utilisateur
-     * - startDate: Date de début du congé
-     * - endDate: Date de fin du congé
-     * - typeConge: Type de congé
-     */
     @GetMapping("/detect-conflicts")
     @PreAuthorize("isAuthenticated()")
     @Operation(summary = "Détecte les conflits d'absences potentiels",
@@ -114,13 +89,6 @@ public class AIController {
         return ResponseEntity.ok(detection);
     }
 
-    /**
-     * GET /api/ai/predict-trends
-     * Prédit les tendances d'absences sur les 3 prochains mois
-     * 
-     * Query params:
-     * - pays: Code du pays
-     */
     @GetMapping("/predict-trends")
     @PreAuthorize("hasAnyRole('RH', 'ADMIN')")
     @Operation(summary = "Prédit les tendances d'absences",
@@ -136,13 +104,6 @@ public class AIController {
         return ResponseEntity.ok(prediction);
     }
 
-    /**
-     * GET /api/ai/analyze-balance
-     * Analyse le solde de congés d'un utilisateur
-     * 
-     * Query params:
-     * - userId: ID de l'utilisateur
-     */
     @GetMapping("/analyze-balance")
     @PreAuthorize("isAuthenticated()")
     @Operation(summary = "Analyse le solde de congés",

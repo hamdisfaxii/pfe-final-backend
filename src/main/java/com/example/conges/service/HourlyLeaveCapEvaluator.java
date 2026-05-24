@@ -17,7 +17,7 @@ import org.springframework.stereotype.Component;
 public class HourlyLeaveCapEvaluator {
 
     static final String LIMITE_MENSUELLE_MSG =
-            "Limite mensuelle de 3 autorisations courtes atteinte.";
+            "Limite mensuelle de 2 autorisations courtes atteinte.";
 
     private final CountryPolicyService countryPolicyService;
     private final DemandeCongeRepository demandeCongeRepository;
@@ -34,7 +34,7 @@ public class HourlyLeaveCapEvaluator {
         return !"FR".equals(countryPolicyService.normalizeBusinessCountry(pays));
     }
 
-    /** À l’acceptation définitive : refuse si déjà 3 autres acceptées le même mois. */
+    /** À l’acceptation définitive : refuse si déjà 2 autres acceptées le même mois. */
     public void assertMonthlyCapOnAccept(DemandeConge demande, Long excludeDemandeId) {
         if (!isNonFranceHourlyShortLeave(demande)) {
             return;

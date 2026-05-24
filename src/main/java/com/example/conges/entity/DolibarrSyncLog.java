@@ -55,8 +55,9 @@ public class DolibarrSyncLog {
 
     @PrePersist
     void onPersist() {
-        if (createdAt == null) {
-            createdAt = LocalDateTime.now();
-        }
+        if (createdAt == null) createdAt = LocalDateTime.now();
+        if (entityType == null || entityType.isBlank()) entityType = "UNKNOWN";
+        if (direction == null) direction = SyncDirection.INBOUND;
+        if (status == null) status = SyncStatus.FAILED;
     }
 }

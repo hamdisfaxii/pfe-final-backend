@@ -22,6 +22,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
 import javax.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -222,12 +224,43 @@ public class HrConfigController {
         );
     }
 
+    @PutMapping("/public-holidays/{id}")
+    public ResponseEntity<Holiday> updatePublicHoliday(
+            @PathVariable Long id,
+            @Valid @RequestBody PublicHolidayCreateRequest request
+    ) {
+        return ResponseEntity.ok(hrHolidayService.updatePublicHoliday(id, request.getLibelle(), request.getDateJour()));
+    }
+
     @PutMapping("/public-holidays/{id}/apply")
     public ResponseEntity<Holiday> applyPublicHoliday(
             @PathVariable Long id,
             @RequestParam(name = "applied") boolean applied
     ) {
         return ResponseEntity.ok(hrHolidayService.setAppliedState(id, applied));
+    }
+
+    @DeleteMapping("/public-holidays/bulk")
+    public ResponseEntity<Map<String, Object>> bulkDeletePublicHolidays(
+            @RequestBody List<Long> ids
+    ) {
+        int deleted = hrHolidayService.bulkDelete(ids);
+        return ResponseEntity.ok(Map.of("success", true, "deleted", deleted));
+    }
+
+    @PutMapping("/public-holidays/bulk/apply")
+    public ResponseEntity<Map<String, Object>> bulkApplyPublicHolidays(
+            @RequestBody Map<String, Object> body
+    ) {
+        @SuppressWarnings("unchecked")
+        List<Object> rawIds = (List<Object>) body.get("ids");
+        List<Long> ids = rawIds == null ? List.of() : rawIds.stream()
+                .filter(Objects::nonNull)
+                .map(o -> Long.valueOf(o.toString()))
+                .collect(Collectors.toList());
+        boolean applied = Boolean.TRUE.equals(body.get("applied"));
+        int updated = hrHolidayService.bulkSetAppliedState(ids, applied);
+        return ResponseEntity.ok(Map.of("success", true, "updated", updated));
     }
 
     @DeleteMapping("/public-holidays/{id}")
@@ -237,6 +270,7 @@ public class HrConfigController {
     }
 
     @GetMapping("/work-schedules")
+    @PreAuthorize("hasAnyRole('RH','ADMIN','EMPLOYE','MANAGER')")
     public ResponseEntity<WorkScheduleConfigResponse> getWorkSchedules(
             @AuthenticationPrincipal UserEntity user,
             @RequestParam(name = "country", required = false) String country,

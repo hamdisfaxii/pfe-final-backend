@@ -2,6 +2,7 @@
 .env
 .env.local
 .env.*.local
+.env.properties
 
 # IDE
 .idea/
@@ -9,6 +10,7 @@
 *.swp
 *.swo
 *~
+*.code-workspace
 
 # Build
 target/
@@ -16,11 +18,6 @@ target/
 *.war
 *.ear
 *.class
-
-# Node
-node_modules/
-npm-debug.log
-yarn-error.log
 
 # System
 .DS_Store
@@ -30,9 +27,13 @@ Thumbs.db
 logs/
 *.log
 
-# Database
+# Database & Runtime data
 *.db
 *.sqlite
+data/
 
-# Mock Node : état persistant local (mots de passe démo, demandes, soldes…)
-mock-persist.json
+# Uploads (user files - keep email assets tracked via !exception)
+uploads/*
+!uploads/email/
+uploads/email/*
+!uploads/email/*.png

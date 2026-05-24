@@ -4,6 +4,7 @@ import com.example.conges.entity.CountryLeavePolicy;
 import com.example.conges.entity.TypeConge;
 import com.example.conges.entity.UserEntity;
 import com.example.conges.repository.CountryLeavePolicyRepository;
+import java.text.Normalizer;
 import java.time.LocalDate;
 import java.util.EnumMap;
 import java.util.List;
@@ -25,7 +26,7 @@ public class CountryPolicyService {
 
     /** Autorisations courtes hors France : durée fixe et plafond mensuel (acceptées + en attente à la création). */
     public static final int NON_FR_SHORT_LEAVE_MINUTES = 120;
-    public static final int NON_FR_SHORT_LEAVE_MONTHLY_CAP = 3;
+    public static final int NON_FR_SHORT_LEAVE_MONTHLY_CAP = 2;
 
     private static final Map<TypeConge, Integer> DEFAULT_POLICY = new EnumMap<>(TypeConge.class);
     private static final Map<String, Double> DEFAULT_MONTHLY_PAYE = Map.of("TN", 1.83, "MA", 1.05, "FR", 2.08);
@@ -49,26 +50,38 @@ public class CountryPolicyService {
         if (pays == null || pays.isBlank()) {
             return "TN";
         }
-        String u = pays.trim().toUpperCase(Locale.ROOT);
-        if (FR_OVERSEAS.contains(u)) {
-            return "FR";
-        }
-        if (u.startsWith("FR")) {
-            return "FR";
-        }
-        if (u.length() == 2) {
-            return u;
-        }
-        if (u.contains("TUNIS")) {
+        // Supprime les accents (ex. « Français » → « FRANCAIS ») avant la recherche par mots-clés,
+        // sinon le « Ç » casse le contains("FRANC"). Synchronisé avec le frontend country.js.
+        String c = Normalizer.normalize(pays.trim(), Normalizer.Form.NFD)
+                .replaceAll("\\p{M}+", "")
+                .toUpperCase(Locale.ROOT);
+        if (c.isEmpty()) {
             return "TN";
         }
-        if (u.contains("MAROC") || u.contains("MOROCC")) {
-            return "MA";
-        }
-        if (u.contains("FRANC")) {
+        
+        // Outre-mer français → FR
+        if (FR_OVERSEAS.contains(c)) {
             return "FR";
         }
-        return u.length() >= 2 ? u.substring(0, 2) : u;
+        
+        // Codes ISO2 valides uniquement
+        if ("TN".equals(c) || "FR".equals(c) || "MA".equals(c)) {
+            return c;
+        }
+        
+        // Recherche par mots-clés (ordre : TN, FR, MA)
+        if (c.contains("TUNIS")) {
+            return "TN";
+        }
+        if (c.contains("FRANCE") || c.contains("FRANC")) {
+            return "FR";
+        }
+        if (c.contains("MAROC") || c.contains("MOROCCO")) {
+            return "MA";
+        }
+        
+        // Défaut : Tunisie
+        return "TN";
     }
 
     public Optional<CountryLeavePolicy> findPolicy(String countryCode, TypeConge typeConge) {

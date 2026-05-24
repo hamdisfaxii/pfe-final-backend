@@ -16,6 +16,8 @@ import com.example.conges.repository.LeaveTypeRepository;
 import com.example.conges.repository.UserRepository;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.Base64;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -36,13 +38,18 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
+import javax.annotation.PostConstruct;
 
 /**
  * Intégration Dolibarr : API REST et accès SQL optionnel sur la base Dolibarr.
@@ -56,7 +63,7 @@ import org.springframework.web.client.RestTemplate;
 @Slf4j
 public class DolibarrService {
 
-    private static final int OUTBOUND_MAX_RETRIES = 3;
+    private static final int OUTBOUND_MAX_RETRIES = 1;
 
     private static final Map<String, String> ISO3166_ALPHA3_TO2 =
             Map.of("FRA", "FR", "TUN", "TN", "MAR", "MA");
@@ -76,7 +83,15 @@ public class DolibarrService {
     private final JdbcTemplate jdbcTemplate;
     @Qualifier("dolibarrJdbcTemplate")
     private final JdbcTemplate dolibarrJdbcTemplate;
-    private final RestTemplate restTemplate = new RestTemplate();
+    private RestTemplate restTemplate;
+
+    @PostConstruct
+    private void initRestTemplate() {
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(5_000);
+        factory.setReadTimeout(8_000);
+        this.restTemplate = new RestTemplate(factory);
+    }
 
     @Value("${dolibarr.database.table-prefix:llx_}")
     private String dolibarrTablePrefix;
@@ -643,43 +658,449 @@ public class DolibarrService {
         }
     }
 
+    /**
+     * Authentifie un utilisateur directement via la base de données Dolibarr.
+     * Contourne le endpoint REST /login qui est souvent bloqué (403) dans certaines configurations.
+     * Supporte MD5, SHA-256 et BCrypt (tous les formats de hash Dolibarr).
+     */
+    public DolibarrEmployeeDto authenticateViaDolibarrDb(String loginOrEmail, String password) {
+        if (loginOrEmail == null || loginOrEmail.isBlank() || password == null || password.isBlank()) {
+            return null;
+        }
+        try {
+            String prefix = (dolibarrTablePrefix == null || dolibarrTablePrefix.isBlank()) ? "llx_" : dolibarrTablePrefix;
+            String sql = "SELECT rowid, login, email, pass, pass_crypted, pass_encoding FROM " + prefix + "user "
+                    + "WHERE (LOWER(email) = LOWER(?) OR LOWER(login) = LOWER(?)) AND statut = 1 LIMIT 1";
+
+            List<Map<String, Object>> rows = dolibarrJdbcTemplate.queryForList(sql, loginOrEmail, loginOrEmail);
+            if (rows.isEmpty()) {
+                log.debug("DB auth: aucun utilisateur actif trouvé pour '{}'", loginOrEmail);
+                return null;
+            }
+
+            Map<String, Object> row = rows.get(0);
+            // Dolibarr stores BCrypt in pass_crypted; legacy plain/MD5 in pass
+            String passCrypted = row.get("pass_crypted") != null ? String.valueOf(row.get("pass_crypted")) : "";
+            String passPlain   = row.get("pass") != null ? String.valueOf(row.get("pass")) : "";
+            String storedHash  = !passCrypted.isBlank() ? passCrypted : passPlain;
+            String encoding    = row.get("pass_encoding") != null ? String.valueOf(row.get("pass_encoding")).toLowerCase() : "";
+            String login      = row.get("login") != null ? String.valueOf(row.get("login")) : loginOrEmail;
+            Long   userId     = row.get("rowid") != null ? Long.valueOf(row.get("rowid").toString()) : null;
+
+            log.info("🔍 DB auth: user='{}' login='{}' encoding='{}' hashLen={}", loginOrEmail, login, encoding, storedHash.length());
+            boolean matches = verifyDolibarrPassword(password, storedHash, encoding, login);
+            if (!matches) {
+                log.info("❌ DB auth: mot de passe incorrect pour '{}' (encoding={})", loginOrEmail, encoding);
+                return null;
+            }
+
+            log.info("✅ Authentification DB Dolibarr réussie pour login={}", login);
+            // Récupérer le profil complet depuis l'API REST (admin key)
+            DolibarrEmployeeDto emp = userId != null ? getEmployeeFromDolibarrById(userId) : null;
+            if (emp == null) emp = findEmployeeByEmail(loginOrEmail);
+            if (emp == null) emp = findEmployeeByLogin(login);
+            if (emp == null) {
+                // Construire un DTO minimal depuis les données DB
+                emp = new DolibarrEmployeeDto();
+                emp.setId(userId);
+                emp.setLogin(login);
+                String dbEmail = row.get("email") != null ? String.valueOf(row.get("email")) : "";
+                emp.setEmail(dbEmail.isBlank() ? loginOrEmail : dbEmail);
+            }
+            return emp;
+        } catch (Exception ex) {
+            log.debug("Authentification DB Dolibarr indisponible pour '{}': {}", loginOrEmail, ex.getMessage());
+            return null;
+        }
+    }
+
+    private boolean verifyDolibarrPassword(String password, String storedHash, String encoding, String login) {
+        if (storedHash == null || storedHash.isBlank()) return false;
+        // BCrypt (stocké tel quel avec préfixe $2y$ ou $2a$)
+        if (storedHash.startsWith("$2") || encoding.contains("bcrypt")) {
+            try {
+                return new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder()
+                        .matches(password, storedHash);
+            } catch (Exception e) { return false; }
+        }
+        // SHA-256 : Dolibarr v14+ (formats: sha256(pass) ou sha256(login+pass) ou sha256(entity+pass))
+        if (encoding.contains("sha256") || encoding.contains("sha-256")) {
+            return sha256(password).equalsIgnoreCase(storedHash)
+                    || sha256(login + password).equalsIgnoreCase(storedHash)
+                    || sha256("1" + password).equalsIgnoreCase(storedHash);
+        }
+        // MD5 : Dolibarr < v14 ou config legacy
+        if (encoding.isBlank() || encoding.contains("md5")) {
+            return md5(password).equalsIgnoreCase(storedHash)
+                    || md5(login + password).equalsIgnoreCase(storedHash);
+        }
+        // SHA-1
+        if (encoding.contains("sha1") || encoding.contains("sha-1")) {
+            return sha1(password).equalsIgnoreCase(storedHash);
+        }
+        return false;
+    }
+
+    private String sha256(String input) {
+        return hashWith("SHA-256", input);
+    }
+    private String sha1(String input) {
+        return hashWith("SHA-1", input);
+    }
+    private String md5(String input) {
+        return hashWith("MD5", input);
+    }
+    private String hashWith(String algo, String input) {
+        try {
+            MessageDigest md = MessageDigest.getInstance(algo);
+            byte[] bytes = md.digest(input.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder();
+            for (byte b : bytes) sb.append(String.format("%02x", b));
+            return sb.toString();
+        } catch (Exception e) { return ""; }
+    }
+
     public DolibarrEmployeeDto authenticateUserViaApi(String email, String password) {
         if (!isDolibarrConfigured()) {
             return null;
         }
-        Map<String, Object> payload = new HashMap<>();
-        payload.put("login", email);
-        payload.put("password", password);
 
-        List<String> candidateEndpoints = List.of("/login", "/auth/login");
-        boolean loginSucceeded = false;
-        for (String endpoint : candidateEndpoints) {
-            try {
-                String url = dolibarrUrl + endpoint;
-                HttpEntity<Map<String, Object>> entity = new HttpEntity<>(payload, createHeaders());
-                ResponseEntity<Map> response = restTemplate.exchange(url, HttpMethod.POST, entity, Map.class);
-                if (response.getStatusCode().is2xxSuccessful()) {
-                    loginSucceeded = true;
-                    break;
-                }
-            } catch (Exception ex) {
-                log.debug("Dolibarr login endpoint {} indisponible: {}", endpoint, ex.getMessage());
+        // Pré-résoudre le login name si l'utilisateur a saisi une adresse e-mail
+        String loginName = email;
+        if (email != null && email.contains("@")) {
+            DolibarrEmployeeDto byEmail = findEmployeeByEmail(email);
+            if (byEmail != null && byEmail.getLogin() != null && !byEmail.getLogin().isBlank()) {
+                loginName = byEmail.getLogin();
+                log.debug("Email {} résolu en login Dolibarr={}", email, loginName);
             }
         }
-        if (!loginSucceeded) {
+
+        // Essayer avec le login name résolu, puis fallback sur l'email original
+        List<String> credentialsToTry = loginName.equalsIgnoreCase(email)
+                ? List.of(email)
+                : List.of(loginName, email);
+
+        List<String> candidateEndpoints = List.of("/login", "/auth/login");
+
+        for (String credential : credentialsToTry) {
+            for (String endpoint : candidateEndpoints) {
+                try {
+                    String url = dolibarrUrl + endpoint;
+                    Map<String, Object> loginResponse = tryDolibarrLogin(url, credential, password);
+                    if (loginResponse != null) {
+                        log.info("✅ Authentification Dolibarr réussie pour email={}, login={}", email, credential);
+
+                        // 1. Extraire l'ID depuis la réponse (certaines versions Dolibarr le fournissent)
+                        Long userId = extractUserIdFromLoginResponse(loginResponse);
+                        if (userId != null) {
+                            DolibarrEmployeeDto userFromId = getEmployeeFromDolibarrById(userId);
+                            if (userFromId != null) return userFromId;
+                        }
+
+                        // 2. Utiliser la dolapikey personnelle de l'utilisateur retournée par /login
+                        String userApiKey = extractDoliapikeyFromLoginResponse(loginResponse);
+                        if (userApiKey != null) {
+                            DolibarrEmployeeDto userFromOwnKey = findEmployeeWithApiKey(credential, userApiKey);
+                            if (userFromOwnKey != null) return userFromOwnKey;
+                        }
+
+                        // 3. Chercher par email (avec clé admin)
+                        DolibarrEmployeeDto userByEmail = findEmployeeByEmail(email);
+                        if (userByEmail != null) return userByEmail;
+
+                        // 4. Chercher par login Dolibarr (avec clé admin)
+                        DolibarrEmployeeDto userByLogin = findEmployeeByLogin(credential);
+                        if (userByLogin != null) return userByLogin;
+
+                        log.warn("⚠️ Auth Dolibarr OK pour credential={} mais utilisateur introuvable", credential);
+                        return null;
+                    }
+                } catch (Exception ex) {
+                    log.debug("Dolibarr login endpoint {} échoué pour login={}: {}", endpoint, credential, ex.getMessage());
+                }
+            }
+        }
+
+        log.warn("❌ Authentification Dolibarr échouée pour email={}", email);
+        return null;
+    }
+
+    private String extractDoliapikeyFromLoginResponse(Map<String, Object> loginResponse) {
+        if (loginResponse == null) return null;
+        // Format v14+: {"success": {"dolapikey": "xxx"}}
+        Object success = loginResponse.get("success");
+        if (success instanceof Map) {
+            Object key = ((Map<?, ?>) success).get("dolapikey");
+            if (key != null && !String.valueOf(key).isBlank()) return String.valueOf(key);
+        }
+        // Format ancien: {"dolapikey": "xxx"}
+        Object key = loginResponse.get("dolapikey");
+        if (key != null && !String.valueOf(key).isBlank()) return String.valueOf(key);
+        return null;
+    }
+
+    private DolibarrEmployeeDto findEmployeeWithApiKey(String loginOrEmail, String apiKey) {
+        if (loginOrEmail == null || apiKey == null || !isDolibarrConfigured()) return null;
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("DOLAPIKEY", apiKey);
+            headers.setAccept(List.of(MediaType.APPLICATION_JSON));
+            HttpEntity<?> entity = new HttpEntity<>(headers);
+
+            // Essayer /users/me (Dolibarr v15+)
+            try {
+                ResponseEntity<DolibarrEmployeeDto> meResp = restTemplate.exchange(
+                        dolibarrUrl + "/users/me", HttpMethod.GET, entity, DolibarrEmployeeDto.class);
+                if (meResp.getStatusCode().is2xxSuccessful() && meResp.getBody() != null) {
+                    log.debug("✅ Profil récupéré via /users/me pour login={}", loginOrEmail);
+                    return meResp.getBody();
+                }
+            } catch (Exception ignored) {}
+
+            // Fallback: /users?login=xxx avec la clé de l'utilisateur
+            String encoded = URLEncoder.encode(loginOrEmail, StandardCharsets.UTF_8);
+            ResponseEntity<DolibarrEmployeeDto[]> resp = restTemplate.exchange(
+                    dolibarrUrl + "/users?login=" + encoded + "&limit=5",
+                    HttpMethod.GET, entity, DolibarrEmployeeDto[].class);
+            if (resp.getStatusCode().is2xxSuccessful() && resp.getBody() != null && resp.getBody().length > 0) {
+                return resp.getBody()[0];
+            }
+        } catch (Exception ex) {
+            log.debug("findEmployeeWithApiKey échoué pour login={}: {}", loginOrEmail, ex.getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * Authentifie un utilisateur Dolibarr via HTTP Basic Auth (login:password).
+     * Plus fiable que le endpoint /login qui peut être désactivé ou avoir un format variable.
+     */
+    public DolibarrEmployeeDto authenticateViaBasicAuth(String loginName, String password) {
+        if (loginName == null || loginName.isBlank() || password == null || !isDolibarrConfigured()) {
+            return null;
+        }
+        try {
+            String creds = loginName + ":" + password;
+            String basicEncoded = Base64.getEncoder().encodeToString(creds.getBytes(StandardCharsets.UTF_8));
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("Authorization", "Basic " + basicEncoded);
+            headers.setAccept(List.of(MediaType.APPLICATION_JSON));
+            HttpEntity<?> entity = new HttpEntity<>(headers);
+
+            // Essayer /users/me en priorité (accessible à tout utilisateur authentifié, Dolibarr v15+)
+            try {
+                ResponseEntity<DolibarrEmployeeDto> meResp = restTemplate.exchange(
+                        dolibarrUrl + "/users/me", HttpMethod.GET, entity, DolibarrEmployeeDto.class);
+                if (meResp.getStatusCode().is2xxSuccessful() && meResp.getBody() != null) {
+                    log.info("✅ Basic Auth Dolibarr OK via /users/me pour login={}", loginName);
+                    return meResp.getBody();
+                }
+            } catch (Exception ignored) {}
+
+            // Fallback : /users?login=xxx (nécessite permission lecture utilisateurs)
+            String urlEncoded = URLEncoder.encode(loginName, StandardCharsets.UTF_8);
+            ResponseEntity<DolibarrEmployeeDto[]> response = restTemplate.exchange(
+                    dolibarrUrl + "/users?login=" + urlEncoded + "&limit=1",
+                    HttpMethod.GET, entity, DolibarrEmployeeDto[].class);
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null
+                    && response.getBody().length > 0) {
+                log.info("✅ Basic Auth Dolibarr OK via /users?login pour login={}", loginName);
+                return response.getBody()[0];
+            }
+        } catch (Exception ex) {
+            log.debug("Basic Auth Dolibarr échoué pour login={}: {}", loginName, ex.getMessage());
+        }
+        return null;
+    }
+
+    private DolibarrEmployeeDto findEmployeeByLogin(String loginName) {
+        if (loginName == null || loginName.isBlank() || !isDolibarrConfigured()) return null;
+        try {
+            String encoded = URLEncoder.encode(loginName, StandardCharsets.UTF_8);
+            HttpHeaders headers = createHeaders();
+            HttpEntity<?> entity = new HttpEntity<>(headers);
+            ResponseEntity<DolibarrEmployeeDto[]> response = restTemplate.exchange(
+                    dolibarrUrl + "/users?login=" + encoded + "&limit=5",
+                    HttpMethod.GET, entity, DolibarrEmployeeDto[].class);
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null
+                    && response.getBody().length > 0) {
+                return response.getBody()[0];
+            }
+        } catch (Exception ex) {
+            log.debug("findEmployeeByLogin({}) échoué: {}", loginName, ex.getMessage());
+        }
+        // Fallback : parcourir la liste complète et comparer le login
+        try {
+            List<DolibarrEmployeeDto> all = getEmployeesFromDolibarr();
+            return all.stream()
+                    .filter(e -> loginName.equalsIgnoreCase(e.getLogin()) || loginName.equalsIgnoreCase(e.getEmail()))
+                    .findFirst().orElse(null);
+        } catch (Exception ex) {
+            log.debug("findEmployeeByLogin fallback échoué pour {}: {}", loginName, ex.getMessage());
+        }
+        return null;
+    }
+
+    private Map<String, Object> tryDolibarrLogin(String url, String email, String password) {
+        List<Map<String, String>> payloadCandidates = List.of(
+                Map.of("login", email, "password", password),
+                Map.of("username", email, "password", password),
+                Map.of("email", email, "password", password)
+        );
+
+        for (Map<String, String> payload : payloadCandidates) {
+            try {
+                // L'endpoint /login ne doit pas recevoir DOLAPIKEY — il vérifie login/mdp et retourne un token
+                HttpHeaders headers = new HttpHeaders();
+                headers.setContentType(MediaType.APPLICATION_JSON);
+                headers.setAccept(List.of(MediaType.APPLICATION_JSON));
+                HttpEntity<Map<String, String>> entity = new HttpEntity<>(payload, headers);
+                ResponseEntity<Map> response = restTemplate.exchange(url, HttpMethod.POST, entity, Map.class);
+                if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                    return response.getBody();
+                }
+            } catch (Exception ex) {
+                log.debug("Dolibarr login JSON payload {} failed for {}: {}", payload.keySet(), url, ex.getMessage());
+            }
+
+            try {
+                HttpHeaders headers = new HttpHeaders();
+                headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+                headers.setAccept(List.of(MediaType.APPLICATION_JSON));
+                MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
+                payload.forEach(form::add);
+                HttpEntity<MultiValueMap<String, String>> formEntity = new HttpEntity<>(form, headers);
+                ResponseEntity<Map> response = restTemplate.exchange(url, HttpMethod.POST, formEntity, Map.class);
+                if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                    return response.getBody();
+                }
+            } catch (Exception ex) {
+                log.debug("Dolibarr login form payload {} failed for {}: {}", payload.keySet(), url, ex.getMessage());
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Extrait l'ID utilisateur de la réponse du login Dolibarr
+     * Dolibarr peut retourner: {"id": 123, "user_id": 123, "rowid": 123, ...}
+     */
+    private Long extractUserIdFromLoginResponse(Map<String, Object> loginResponse) {
+        if (loginResponse == null) {
+            return null;
+        }
+        
+        // Essayer les clés courantes
+        for (String key : List.of("id", "user_id", "userid", "rowid", "userId")) {
+            Object value = loginResponse.get(key);
+            if (value != null) {
+                try {
+                    return Long.parseLong(value.toString());
+                } catch (NumberFormatException ignored) {}
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Récupère un employé Dolibarr par son ID via l'API
+     */
+    private DolibarrEmployeeDto getEmployeeFromDolibarrById(Long employeeId) {
+        if (employeeId == null || !isDolibarrConfigured()) {
+            return null;
+        }
+        
+        try {
+            String url = dolibarrUrl + "/users/" + employeeId;
+            HttpHeaders headers = createHeaders();
+            HttpEntity<?> entity = new HttpEntity<>(headers);
+            
+            ResponseEntity<DolibarrEmployeeDto> response = restTemplate.exchange(
+                    url,
+                    HttpMethod.GET,
+                    entity,
+                    DolibarrEmployeeDto.class
+            );
+            
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                log.debug("✅ Utilisateur {} récupéré depuis Dolibarr API", employeeId);
+                return response.getBody();
+            }
+        } catch (Exception ex) {
+            log.debug("Erreur lors de la récupération de l'utilisateur {} : {}", employeeId, ex.getMessage());
+        }
+        
+        return null;
+    }
+
+    /**
+     * Cherche un employé par son email dans la liste Dolibarr
+     * Avec gestion améliorée de la pagination
+     */
+    private DolibarrEmployeeDto findEmployeeByEmail(String email) {
+        if (email == null || email.isBlank() || !isDolibarrConfigured()) {
             return null;
         }
 
-        return getEmployeesFromDolibarr().stream()
-                .filter(emp -> emp.getEmail() != null && emp.getEmail().equalsIgnoreCase(email))
-                .findFirst()
-                .orElse(null);
+        try {
+            // Filtre SQL Dolibarr (v13+) : syntaxe correcte pour filtrer par email
+            String sqlfilter = URLEncoder.encode("(t.email:=:'" + email + "')", StandardCharsets.UTF_8);
+            String url = dolibarrUrl + "/users?sqlfilters=" + sqlfilter + "&limit=5";
+            HttpHeaders headers = createHeaders();
+            HttpEntity<?> entity = new HttpEntity<>(headers);
+            ResponseEntity<DolibarrEmployeeDto[]> response = restTemplate.exchange(
+                    url, HttpMethod.GET, entity, DolibarrEmployeeDto[].class);
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                for (DolibarrEmployeeDto dto : response.getBody()) {
+                    if (email.equalsIgnoreCase(dto.getEmail())) return dto;
+                }
+            }
+        } catch (Exception ex) {
+            log.debug("Recherche sqlfilters par email échouée: {}", ex.getMessage());
+        }
+        
+        // Fallback: récupérer la liste complète (avec pagination si nécessaire)
+        try {
+            List<DolibarrEmployeeDto> employees = getEmployeesFromDolibarr();
+            return employees.stream()
+                    .filter(emp -> emp.getEmail() != null && emp.getEmail().equalsIgnoreCase(email))
+                    .findFirst()
+                    .orElse(null);
+        } catch (Exception ex) {
+            log.warn("Impossible de trouver l'utilisateur par email {}: {}", email, ex.getMessage());
+            return null;
+        }
+    }
+
+    public DolibarrEmployeeDto findEmployeeByCredential(String credential) {
+        if (credential == null || credential.isBlank() || !isDolibarrConfigured()) {
+            return null;
+        }
+
+        DolibarrEmployeeDto byEmail = findEmployeeByEmail(credential);
+        if (byEmail != null) {
+            return byEmail;
+        }
+
+        try {
+            List<DolibarrEmployeeDto> employees = getEmployeesFromDolibarr();
+            return employees.stream()
+                    .filter(emp -> emp.getLogin() != null && emp.getLogin().equalsIgnoreCase(credential))
+                    .findFirst()
+                    .orElse(null);
+        } catch (Exception ex) {
+            log.warn("Impossible de trouver l'utilisateur par identifiant {}: {}", credential, ex.getMessage());
+            return null;
+        }
     }
 
     /**
      * Outbound sync when a workflow completes approval.
      * Keeps Dolibarr as source-of-truth: status + allocation.
+     * REQUIRES_NEW: sync failure must never roll back the caller's decision transaction.
      */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public boolean syncApprovedLeave(DemandeConge demande) {
         if (demande == null || demande.getUser() == null) {
             return false;
@@ -693,9 +1114,6 @@ public class DolibarrService {
             return leaveUpdated;
         }
         boolean allocationUpdated = consumeAllocationForApprovedLeave(demande);
-        if (allocationUpdated) {
-            refreshAllocationsForUser(demande.getUser(), demande.getDateDebut().getYear());
-        }
         return leaveUpdated && allocationUpdated;
     }
 
@@ -1335,10 +1753,23 @@ public class DolibarrService {
             return "TN";
         }
         String u = isoGuess.trim().toUpperCase(Locale.ROOT);
+        if (u.isEmpty()) {
+            return "TN";
+        }
+        
+        // 1. Outre-mer français → FR
         u = mapFrenchOverseasToMetro(u);
         if ("TN".equals(u) || "FR".equals(u) || "MA".equals(u)) {
             return u;
         }
+        
+        // 2. Chercher par mots-clés avant de rejeter
+        String fromLabel = iso2FromLabel(isoGuess);
+        if (fromLabel != null && !fromLabel.isBlank()) {
+            return mapFrenchOverseasToMetro(fromLabel);
+        }
+        
+        // 3. Défaut: Tunisie
         return "TN";
     }
 
@@ -1430,6 +1861,8 @@ public class DolibarrService {
             return null;
         }
         String s = raw.trim().toUpperCase(Locale.ROOT).replaceAll("\\s+", "");
+        
+        // Codes numériques (250=FR, 788=TN, 504=MA)
         if (s.matches("\\d{1,3}")) {
             try {
                 int n = Integer.parseInt(s);
@@ -1439,14 +1872,20 @@ public class DolibarrService {
                 return null;
             }
         }
+        
+        // Codes ISO2 2 caractères (TN, FR, MA, etc.)
         if (s.length() == 2 && s.matches("[A-Z]{2}")) {
             return mapFrenchOverseasToMetro(s);
         }
+        
+        // Codes ISO3 3 caractères (FRA, TUN, MAR, etc.)
         if (s.length() == 3) {
             String r = ISO3166_ALPHA3_TO2.get(s);
             return r != null ? mapFrenchOverseasToMetro(r) : null;
         }
-        return null;
+        
+        // Noms complets ou variantes (TUNISIA, FRANCE, MAROC, etc.)
+        return iso2FromLabel(raw);
     }
 
     private static String iso2FromLabel(String label) {
@@ -1454,15 +1893,19 @@ public class DolibarrService {
             return null;
         }
         String t = label.toLowerCase(Locale.ROOT);
+        
+        // Recherche par mots-clés (ordre : TN, FR, MA pour cohérence backend)
         if (t.contains("tunis")) {
             return "TN";
-        }
-        if (t.contains("maroc")) {
-            return "MA";
         }
         if (t.contains("franc") || t.contains("france")) {
             return "FR";
         }
+        if (t.contains("maroc") || t.contains("morocco")) {
+            return "MA";
+        }
+        
+        // Aucune correspondance trouvée
         return null;
     }
 
@@ -1506,10 +1949,14 @@ public class DolibarrService {
      * Crée les headers HTTP avec la clé API Dolibarr
      */
     private HttpHeaders createHeaders() {
+        return createHeaders(MediaType.APPLICATION_JSON);
+    }
+
+    private HttpHeaders createHeaders(MediaType contentType) {
         HttpHeaders headers = new HttpHeaders();
         headers.set("DOLAPIKEY", dolibarrApiKey);
-        headers.set("Accept", "application/json");
-        headers.set("Content-Type", "application/json");
+        headers.setAccept(List.of(MediaType.APPLICATION_JSON));
+        headers.setContentType(contentType);
         return headers;
     }
 

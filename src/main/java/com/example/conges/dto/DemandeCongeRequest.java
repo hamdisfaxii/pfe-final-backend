@@ -4,6 +4,7 @@ import com.example.conges.entity.TypeConge;
 import com.fasterxml.jackson.annotation.JsonAlias;
 import javax.validation.constraints.NotBlank;
 import javax.validation.constraints.NotNull;
+import java.text.Normalizer;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import com.example.conges.entity.HalfDay;
@@ -69,8 +70,11 @@ public class DemandeCongeRequest {
         if (normalized.contains("sans solde")) {
             return TypeConge.SANS_SOLDE;
         }
-        if (normalized.contains("courte") || normalized.contains("permission") || normalized.contains("sortie")) {
+        if (normalized.contains("courte") || normalized.contains("permission") || normalized.contains("sortie") || normalized.contains("rtt")) {
             return TypeConge.COURTE_DUREE;
+        }
+        if (normalized.contains("retard")) {
+            return TypeConge.SANS_SOLDE;
         }
         return TypeConge.PAYE;
     }

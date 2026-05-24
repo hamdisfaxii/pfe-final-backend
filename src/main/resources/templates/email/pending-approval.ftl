@@ -11,7 +11,9 @@
         .footer { background-color: #ecf0f1; padding: 15px; text-align: center; font-size: 12px; color: #7f8c8d; border-radius: 0 0 8px 8px; }
         .info-box { background-color: #fef5e7; padding: 15px; border-radius: 4px; margin: 15px 0; border-left: 4px solid #f39c12; }
         .info-box strong { color: #f39c12; }
-        .btn { display: inline-block; padding: 10px 20px; background-color: #3498db; color: white; text-decoration: none; border-radius: 4px; margin: 10px 0; }
+        .btn-approve { display: inline-block; padding: 12px 28px; background-color: #27ae60; color: white; text-decoration: none; border-radius: 6px; margin: 8px 6px; font-weight: bold; font-size: 15px; }
+        .btn-reject  { display: inline-block; padding: 12px 28px; background-color: #e74c3c; color: white; text-decoration: none; border-radius: 6px; margin: 8px 6px; font-weight: bold; font-size: 15px; }
+        .btn-detail  { display: inline-block; padding: 8px 18px; background-color: #3498db; color: white; text-decoration: none; border-radius: 4px; margin: 6px 0; font-size: 13px; }
     </style>
 </head>
 <body>
@@ -37,10 +39,19 @@
                 </ul>
             </div>
             
-            <p>Veuillez approuver ou rejeter cette demande via votre dashboard de gestion des congés.</p>
-            
+            <p>Vous pouvez décider directement depuis cet email en cliquant sur l'un des boutons ci-dessous :</p>
+
+            <p style="text-align: center; margin: 20px 0;">
+                <a href="${backendUrl}/api/public/decision?token=${approveToken}" class="btn-approve">✅ Approuver</a>
+                &nbsp;
+                <a href="${backendUrl}/api/public/decision?token=${rejectToken}" class="btn-reject">❌ Rejeter</a>
+            </p>
+
             <p style="text-align: center;">
-                <a href="${appUrl}/dashboard/validation" class="btn">Accéder au Dashboard</a>
+                <a href="${appUrl}/rh/requests/${demandeId}" class="btn-detail">Voir dans le dashboard</a>
+            </p>
+            <p style="text-align: center; font-size: 12px; color: #7f8c8d; margin-top: 6px;">
+                Lien dashboard : ${appUrl}/rh/requests/${demandeId}
             </p>
             
             <p>Cordialement,<br>

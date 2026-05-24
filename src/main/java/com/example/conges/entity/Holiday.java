@@ -1,11 +1,14 @@
 package com.example.conges.entity;
 
 import com.example.conges.dto.dolibarr.DolibarrHolidayDto;
+import com.fasterxml.jackson.annotation.JsonFormat;
 import javax.persistence.Column;
 import javax.persistence.Entity;
 import javax.persistence.GeneratedValue;
 import javax.persistence.GenerationType;
 import javax.persistence.Id;
+import javax.persistence.PrePersist;
+import javax.persistence.PreUpdate;
 import javax.persistence.Table;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -29,12 +32,14 @@ public class Holiday {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(unique = true, nullable = false)
+    /** ID Dolibarr ou ID synthétique pour les jours fériés créés localement. */
+    @Column(unique = true)
     private Long dolibarrHolidayId;
 
     @Column(nullable = false)
     private String libelle;
 
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd")
     @Column(nullable = false)
     private LocalDate dateJour;
 
@@ -54,6 +59,17 @@ public class Holiday {
 
     @Column(nullable = false)
     private LocalDateTime updatedAt;
+
+    @PrePersist
+    void onPersist() {
+        if (createdAt == null) createdAt = LocalDateTime.now();
+        if (updatedAt == null) updatedAt = LocalDateTime.now();
+    }
+
+    @PreUpdate
+    void onUpdate() {
+        updatedAt = LocalDateTime.now();
+    }
 
     public static Holiday fromDto(DolibarrHolidayDto dto) {
         return Holiday.builder()

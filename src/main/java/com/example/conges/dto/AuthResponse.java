@@ -21,5 +21,6 @@ public class AuthResponse {
         private String prenom;
         private Role role;
         private String pays;
+        private String departement;
     }
 }

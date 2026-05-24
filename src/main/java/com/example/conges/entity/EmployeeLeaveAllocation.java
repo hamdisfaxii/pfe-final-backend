@@ -40,7 +40,8 @@ public class EmployeeLeaveAllocation {
     @JoinColumn(name = "leave_type_id", nullable = false)
     private LeaveType leaveType;
 
-    @Column(unique = true, nullable = false)
+    /** ID allocation Dolibarr — peut être null pour les allocations créées manuellement par le RH. */
+    @Column(unique = true)
     private Long dolibarrAllocationId;
 
     @Column(nullable = false)

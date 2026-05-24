@@ -7,6 +7,7 @@ import com.example.conges.service.AuthService;
 import javax.validation.Valid;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -14,6 +15,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -30,7 +32,7 @@ public class AuthController {
     @GetMapping("/me")
     public ResponseEntity<AuthResponse.UserInfo> me(@AuthenticationPrincipal UserEntity user) {
         if (user == null) {
-            throw new RuntimeException("Non authentifié");
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Non authentifié");
         }
         AuthResponse.UserInfo info = AuthResponse.UserInfo.builder()
                 .id(user.getId())
@@ -39,6 +41,7 @@ public class AuthController {
                 .prenom(user.getPrenom())
                 .role(user.getRole())
                 .pays(user.getPays())
+                .departement(user.getDepartement())
                 .build();
         return ResponseEntity.ok(info);
     }

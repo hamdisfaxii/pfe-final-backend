@@ -22,6 +22,7 @@ public class HrAdminsController {
 
     private final UserRepository userRepository;
 
+    /** GET /api/hr/admins — liste des administrateurs RH actifs. */
     @GetMapping
     public ResponseEntity<List<AdminOption>> list() {
         List<AdminOption> items = userRepository.findByRole(Role.ADMIN).stream()
@@ -42,12 +43,9 @@ public class HrAdminsController {
 
         static AdminOption from(UserEntity u) {
             return AdminOption.builder()
-                    .id(u.getId())
-                    .email(u.getEmail())
-                    .nom(u.getNom())
-                    .prenom(u.getPrenom())
+                    .id(u.getId()).email(u.getEmail())
+                    .nom(u.getNom()).prenom(u.getPrenom())
                     .build();
         }
     }
 }
-

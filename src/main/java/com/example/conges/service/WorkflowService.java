@@ -92,6 +92,7 @@ public class WorkflowService {
 
         if (!approved) {
             demande.setStatut(StatutConge.REFUSE);
+            demande.setApprovedBy(actor);
             demande.setDateTraitement(LocalDateTime.now());
             if (comment != null && !comment.isBlank()) {
                 demande.setCommentaireRh(comment.trim());
@@ -107,6 +108,7 @@ public class WorkflowService {
         if (nextStep == null) {
             hourlyLeaveCapEvaluator.assertMonthlyCapOnAccept(demande, demande.getId());
             demande.setStatut(StatutConge.ACCEPTE);
+            demande.setApprovedBy(actor);
             demande.setDateTraitement(LocalDateTime.now());
         } else {
             demande.setCurrentStepOrder(nextStep.getStepOrder());

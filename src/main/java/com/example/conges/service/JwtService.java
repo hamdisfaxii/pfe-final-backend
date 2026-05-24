@@ -57,6 +57,47 @@ public class JwtService {
         }
     }
 
+    public String generateApprovalToken(Long demandeId, Long rhId, String action) {
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("demandeId", demandeId);
+        claims.put("rhId", rhId);
+        claims.put("action", action);
+        claims.put("type", "APPROVAL");
+
+        Date now = new Date();
+        Date expiration = new Date(now.getTime() + 7L * 24 * 60 * 60 * 1000);
+
+        return Jwts.builder()
+                .setClaims(claims)
+                .setSubject("approval-" + demandeId + "-" + action)
+                .setIssuedAt(now)
+                .setExpiration(expiration)
+                .signWith(getSigningKey(), SignatureAlgorithm.HS256)
+                .compact();
+    }
+
+    public Map<String, Object> validateApprovalToken(String token) {
+        try {
+            Claims claims = extractAllClaims(token);
+            if (!"APPROVAL".equals(claims.get("type", String.class))) {
+                return null;
+            }
+            if (claims.getExpiration().before(new Date())) {
+                return null;
+            }
+            Long demandeId = ((Number) claims.get("demandeId")).longValue();
+            Long rhId = ((Number) claims.get("rhId")).longValue();
+            String action = claims.get("action", String.class);
+            Map<String, Object> result = new HashMap<>();
+            result.put("demandeId", demandeId);
+            result.put("rhId", rhId);
+            result.put("action", action);
+            return result;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     private Claims extractAllClaims(String token) {
         return Jwts.parserBuilder()
                 .setSigningKey(getSigningKey())

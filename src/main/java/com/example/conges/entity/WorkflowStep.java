@@ -15,6 +15,7 @@ import javax.persistence.ManyToOne;
 import javax.persistence.Table;
 import java.util.Arrays;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.AllArgsConstructor;
@@ -82,7 +83,14 @@ public class WorkflowStep {
             return Arrays.stream(dbData.split(","))
                     .map(String::trim)
                     .filter(s -> !s.isEmpty())
-                    .map(s -> TypeConge.valueOf(s.toUpperCase(Locale.ROOT)))
+                    .map(s -> {
+                        try {
+                            return TypeConge.valueOf(s.toUpperCase(Locale.ROOT));
+                        } catch (IllegalArgumentException ignored) {
+                            return null;
+                        }
+                    })
+                    .filter(Objects::nonNull)
                     .collect(Collectors.toUnmodifiableSet());
         }
     }

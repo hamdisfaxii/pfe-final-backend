@@ -31,9 +31,6 @@ public class HrDecisionController {
 
     private final HrDecisionService hrDecisionService;
 
-    /**
-     * Liste / historique (tous statuts, filtrables) — même chemin que le mock {@code /api/rh/requests}.
-     */
     @GetMapping
     public ResponseEntity<Map<String, Object>> list(
             @AuthenticationPrincipal UserEntity actor,

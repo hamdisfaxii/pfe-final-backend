@@ -122,17 +122,6 @@ public class FranceRttLedgerService {
                 .filter(Objects::nonNull)
                 .orElse(LocalDateTime.now());
 
-        if (!user.isContractActive()) {
-            m.put("rtt_total", BigDecimal.ZERO);
-            m.put("rtt_used", BigDecimal.ZERO);
-            m.put("rtt_pending", BigDecimal.ZERO);
-            m.put("rtt_remaining", BigDecimal.ZERO);
-            m.put("rtt_accrual_mode", mode.name());
-            m.put("contract_suspended", true);
-            m.put("last_rtt_update", lastTs);
-            return m;
-        }
-
         BigDecimal fullAnnual = contractualFullAnnualBeforeProrata(user, settings);
         BigDecimal rowTotal = computation.proratedAnnualTotal(fullAnnual, user, year);
         BigDecimal usedApproved = syncUsedFromApprovedDemandes(user.getId(), year);
@@ -190,8 +179,7 @@ public class FranceRttLedgerService {
      */
     public boolean governsFranceCourteRequests(UserEntity user) {
         return properties.isLocalLedgerEnabled()
-                && isFranceRttTrackedForUi(user)
-                && user.isContractActive();
+                && isFranceRttTrackedForUi(user);
     }
 
     @Transactional(readOnly = true)
@@ -290,6 +278,32 @@ public class FranceRttLedgerService {
                 FranceRttComputationService.maxZero(earned.subtract(syncedUsed).subtract(pending)));
         bal.setLastRttUpdate(now);
         return balanceRepository.save(bal);
+    }
+
+    @Transactional(readOnly = true)
+    public EmployeeFranceRttBalance getPersistedBalance(UserEntity user, int year) {
+        return balanceRepository.findByUserAndCalendarYear(user, year).orElse(null);
+    }
+
+    @Transactional
+    public void setRttRemainingOverride(UserEntity user, int year, double newRemaining) {
+        LocalDateTime now = LocalDateTime.now();
+        EmployeeFranceRttBalance bal = balanceRepository
+                .findByUserAndCalendarYear(user, year)
+                .orElse(null);
+        if (bal == null) {
+            bal = EmployeeFranceRttBalance.builder()
+                    .user(user)
+                    .calendarYear(year)
+                    .rttTotal(BigDecimal.ZERO)
+                    .rttUsed(BigDecimal.ZERO)
+                    .rttRemaining(BigDecimal.ZERO)
+                    .lastRttUpdate(now)
+                    .build();
+        }
+        bal.setRttRemaining(BigDecimal.valueOf(newRemaining).max(BigDecimal.ZERO));
+        bal.setLastRttUpdate(now);
+        balanceRepository.save(bal);
     }
 
     /** Tâche 1er janvier : resynchroniser tous les compteurs projetés depuis les décisions métier stockées en base. */

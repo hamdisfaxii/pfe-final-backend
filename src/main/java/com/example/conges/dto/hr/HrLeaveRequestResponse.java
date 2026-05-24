@@ -22,6 +22,7 @@ public class HrLeaveRequestResponse {
     private String motif;
     private String commentaireRh;
     private LocalDateTime dateSoumission;
+    private LocalDateTime dateDecision;
     private String workflowCode;
     private Integer currentStepOrder;
     private String currentStepType;

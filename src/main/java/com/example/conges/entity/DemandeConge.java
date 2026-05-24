@@ -19,6 +19,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
 import java.util.Objects;
+import java.util.Set;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -119,22 +120,30 @@ public class DemandeConge {
     @Column(name = "duree_permission_minutes")
     private Integer dureePermissionMinutes;
 
+    @Column(name = "piece_jointe_nom", length = 512)
+    private String pieceJointeNom;
+
     /**
-     * Compte les jours ouvrables (lundi–vendredi) entre deux dates incluses.
-     * Si une date est null ou si {@code dateFin} est avant {@code dateDebut}, retourne 0.
+     * Compte les jours ouvrables (lundi–vendredi) entre deux dates incluses, en excluant les jours fériés actifs.
      */
-    public static int calculerJoursOuvrables(LocalDate debut, LocalDate fin) {
+    public static int calculerJoursOuvrables(LocalDate debut, LocalDate fin, Set<LocalDate> holidays) {
         if (debut == null || fin == null || fin.isBefore(debut)) {
             return 0;
         }
+        Set<LocalDate> h = holidays != null ? holidays : Set.of();
         int count = 0;
         for (LocalDate d = debut; !d.isAfter(fin); d = d.plusDays(1)) {
             DayOfWeek dow = d.getDayOfWeek();
-            if (dow != DayOfWeek.SATURDAY && dow != DayOfWeek.SUNDAY) {
+            if (dow != DayOfWeek.SATURDAY && dow != DayOfWeek.SUNDAY && !h.contains(d)) {
                 count++;
             }
         }
         return count;
+    }
+
+    /** Surcharge sans jours fériés (compatibilité interne). */
+    public static int calculerJoursOuvrables(LocalDate debut, LocalDate fin) {
+        return calculerJoursOuvrables(debut, fin, Set.of());
     }
 
     @PrePersist
@@ -162,32 +171,35 @@ public class DemandeConge {
             nombreJoursExact = 0d;
             return;
         }
-        double exact = calculerJoursOuvrablesExact(dateDebut, dateFin, startHalfDay, endHalfDay);
+        // Si nombreJoursExact est déjà calculé (avec jours fériés) par le service, on préserve cette valeur.
+        if (nombreJoursExact != null) {
+            nombreJours = Math.max(0, (int) Math.round(nombreJoursExact));
+            return;
+        }
+        double exact = calculerJoursOuvrablesExact(dateDebut, dateFin, startHalfDay, endHalfDay, Set.of());
         nombreJoursExact = exact;
-        // Compat : garder un entier non négatif (historique/UI legacy).
         nombreJours = Math.max(0, (int) Math.round(exact));
     }
 
     /**
-     * Durée exacte en jours ouvrés (lun–ven) avec demi-journées possibles.
-     * Règles :
-     * - Si demi-journée (start/end) fournie, elle ne s'applique que si la date correspondante est ouvrée.
-     * - Interdit : même date avec start=AFTERNOON et end=MORNING.
+     * Durée exacte en jours ouvrés (lun–ven) avec demi-journées et jours fériés exclus.
      */
     public static double calculerJoursOuvrablesExact(
             LocalDate debut,
             LocalDate fin,
             HalfDay startHalf,
-            HalfDay endHalf
+            HalfDay endHalf,
+            Set<LocalDate> holidays
     ) {
         if (debut == null || fin == null || fin.isBefore(debut)) {
             return 0d;
         }
-        int days = calculerJoursOuvrables(debut, fin);
+        Set<LocalDate> h = holidays != null ? holidays : Set.of();
+        int days = calculerJoursOuvrables(debut, fin, h);
         if (days <= 0) return 0d;
 
-        boolean startIsWorkday = isWorkday(debut);
-        boolean endIsWorkday = isWorkday(fin);
+        boolean startIsWorkday = isWorkdayAndNotHoliday(debut, h);
+        boolean endIsWorkday = isWorkdayAndNotHoliday(fin, h);
 
         // Cas même jour
         if (Objects.equals(debut, fin)) {
@@ -195,7 +207,7 @@ public class DemandeConge {
             if (startHalf == null && endHalf == null) return 1d;
             HalfDay s = startHalf == null ? HalfDay.MORNING : startHalf;
             HalfDay e = endHalf == null ? HalfDay.AFTERNOON : endHalf;
-            if (s == HalfDay.AFTERNOON && e == HalfDay.MORNING) return 0d; // invalide => traité comme 0
+            if (s == HalfDay.AFTERNOON && e == HalfDay.MORNING) return 0d;
             if (s == HalfDay.MORNING && e == HalfDay.MORNING) return 0.5d;
             if (s == HalfDay.AFTERNOON && e == HalfDay.AFTERNOON) return 0.5d;
             return 1d;
@@ -203,19 +215,23 @@ public class DemandeConge {
 
         double exact = days;
         if (startHalf != null && startIsWorkday) {
-            // demi-journée au début => -0.5
             exact -= 0.5d;
         }
         if (endHalf != null && endIsWorkday) {
-            // demi-journée à la fin => -0.5
             exact -= 0.5d;
         }
         return Math.max(0d, exact);
     }
 
-    private static boolean isWorkday(LocalDate d) {
+    /** Surcharge sans jours fériés (compatibilité appelants existants). */
+    public static double calculerJoursOuvrablesExact(
+            LocalDate debut, LocalDate fin, HalfDay startHalf, HalfDay endHalf) {
+        return calculerJoursOuvrablesExact(debut, fin, startHalf, endHalf, Set.of());
+    }
+
+    private static boolean isWorkdayAndNotHoliday(LocalDate d, Set<LocalDate> holidays) {
         DayOfWeek dow = d.getDayOfWeek();
-        return dow != DayOfWeek.SATURDAY && dow != DayOfWeek.SUNDAY;
+        return dow != DayOfWeek.SATURDAY && dow != DayOfWeek.SUNDAY && !holidays.contains(d);
     }
 
     /** Durée exacte (fallback sur entier si exact absent). */

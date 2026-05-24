@@ -10,6 +10,7 @@ import com.example.conges.repository.EmployeeLeaveAllocationRepository;
 import com.example.conges.repository.UserRepository;
 import java.time.LocalDate;
 import java.time.Year;
+import com.example.conges.entity.EmployeeFranceRttBalance;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumMap;
@@ -40,9 +41,9 @@ public class HrLeaveBalanceService {
 
     private final UserRepository userRepository;
     private final EmployeeLeaveAllocationRepository employeeLeaveAllocationRepository;
-    private final FranceRttLedgerService franceRttLedgerService;
     private final CountryPolicyService countryPolicyService;
     private final DolibarrService dolibarrService;
+    private final FranceRttLedgerService franceRttLedgerService;
 
     @Transactional(readOnly = true)
     public HrLeaveBalanceDtos.PageResponse listBalances(
@@ -105,12 +106,20 @@ public class HrLeaveBalanceService {
 
         Map<TypeConge, EmployeeLeaveAllocation> byType = indexByType(allocations);
 
-        boolean frRttReadOnly = isFranceRttReadOnly(user);
         for (HrLeaveBalanceDtos.UpdateLine line : Optional.ofNullable(req.getUpdates()).orElse(List.of())) {
             TypeConge t = line.getTypeConge();
             if (t == null) continue;
-            if (t == TypeConge.COURTE_DUREE && frRttReadOnly) {
-                throw new IllegalArgumentException("RTT France (ledger local) : solde non modifiable manuellement.");
+            if (t == TypeConge.COURTE_DUREE && !isRttApplicable(user)) {
+                throw new IllegalArgumentException("RTT non applicable pour cet employé (pays TN/MA).");
+            }
+            // RTT France : override direct sur le ledger, pas via EmployeeLeaveAllocation.
+            if (t == TypeConge.COURTE_DUREE && franceRttLedgerService.isFranceRttTrackedForUi(user)) {
+                double remaining = line.getRemaining() == null ? 0 : line.getRemaining();
+                if (remaining < 0) {
+                    throw new IllegalArgumentException("Solde négatif interdit.");
+                }
+                franceRttLedgerService.setRttRemainingOverride(user, year, remaining);
+                continue;
             }
             double remaining = line.getRemaining() == null ? 0 : line.getRemaining();
             if (remaining < 0) {
@@ -137,46 +146,50 @@ public class HrLeaveBalanceService {
 
     private HrLeaveBalanceDtos.BalanceRow toRow(UserEntity u, int year, List<EmployeeLeaveAllocation> allocations) {
         Map<TypeConge, EmployeeLeaveAllocation> byType = indexByType(allocations);
-        boolean frRttReadOnly = isFranceRttReadOnly(u);
 
         List<HrLeaveBalanceDtos.BalanceLine> lines = new ArrayList<>();
         for (TypeConge t : TypeConge.values()) {
-            HrLeaveBalanceDtos.BalanceLine line;
-            if (t == TypeConge.COURTE_DUREE && frRttReadOnly) {
-                Map<String, Object> snap = franceRttLedgerService.ledgerSnapshot(u, year, LocalDate.now());
-                double total = asDouble(snap.get("rtt_total"));
-                double used = asDouble(snap.get("rtt_used"));
-                double remaining = asDouble(snap.get("rtt_remaining"));
-                line = HrLeaveBalanceDtos.BalanceLine.builder()
-                        .typeConge(t)
-                        .total(total)
-                        .used(used)
-                        .remaining(remaining)
-                        .readOnly(true)
-                        .message("RTT France géré par ledger local (lecture seule).")
-                        .build();
-            } else {
-                EmployeeLeaveAllocation a = byType.get(t);
-                if (a == null) {
-                    line = HrLeaveBalanceDtos.BalanceLine.builder()
-                            .typeConge(t)
-                            .total(0)
-                            .used(0)
-                            .remaining(0)
-                            .readOnly(true)
-                            .message("Aucune allocation trouvée (sync Dolibarr requise).")
-                            .build();
-                } else {
-                    line = HrLeaveBalanceDtos.BalanceLine.builder()
-                            .typeConge(t)
-                            .total(safe0(a.getJoursInitiaux()))
-                            .used(safe0(a.getJoursUtilises()))
-                            .remaining(safe0(a.getJoursDisponibles()))
-                            .readOnly(false)
-                            .message("")
-                            .build();
-                }
+            // RTT uniquement pour la France — TN et MA n'ont pas de ligne COURTE_DUREE.
+            if (t == TypeConge.COURTE_DUREE && !isRttApplicable(u)) {
+                continue;
             }
+            // RTT France : provient du ledger, pas d'une allocation Dolibarr.
+            if (t == TypeConge.COURTE_DUREE && franceRttLedgerService.isFranceRttTrackedForUi(u)) {
+                Map<String, Object> snap = franceRttLedgerService.ledgerSnapshot(u, year, LocalDate.now());
+                double total, used, remaining;
+                if (!snap.isEmpty()) {
+                    total = asDouble(snap.get("rtt_total"));
+                    used = asDouble(snap.get("rtt_used"));
+                    remaining = asDouble(snap.get("rtt_remaining"));
+                } else {
+                    EmployeeFranceRttBalance bal = franceRttLedgerService.getPersistedBalance(u, year);
+                    if (bal == null) continue;
+                    total = bal.getRttTotal() != null ? bal.getRttTotal().doubleValue() : 0;
+                    used = bal.getRttUsed() != null ? bal.getRttUsed().doubleValue() : 0;
+                    remaining = bal.getRttRemaining() != null ? bal.getRttRemaining().doubleValue() : 0;
+                }
+                lines.add(HrLeaveBalanceDtos.BalanceLine.builder()
+                        .typeConge(t)
+                        .total(safe0(total))
+                        .used(safe0(used))
+                        .remaining(safe0(remaining))
+                        .readOnly(false)
+                        .message("")
+                        .build());
+                continue;
+            }
+            EmployeeLeaveAllocation a = byType.get(t);
+            if (a == null) {
+                continue; // pas d'allocation pour ce type → cellule vide (—) côté RH
+            }
+            HrLeaveBalanceDtos.BalanceLine line = HrLeaveBalanceDtos.BalanceLine.builder()
+                    .typeConge(t)
+                    .total(safe0(a.getJoursInitiaux()))
+                    .used(safe0(a.getJoursUtilises()))
+                    .remaining(safe0(a.getJoursDisponibles()))
+                    .readOnly(false)
+                    .message("")
+                    .build();
             lines.add(line);
         }
 
@@ -195,11 +208,9 @@ public class HrLeaveBalanceService {
                 .build();
     }
 
-    private boolean isFranceRttReadOnly(UserEntity user) {
+    private boolean isRttApplicable(UserEntity user) {
         if (user == null) return false;
-        return countryPolicyService.isRttEnabledForCountry(user.getPays())
-                && franceRttLedgerService.isFranceRttTrackedForUi(user)
-                && franceRttLedgerService.isLocalLedgerActive();
+        return countryPolicyService.isRttEnabledForCountry(user.getPays());
     }
 
     /**

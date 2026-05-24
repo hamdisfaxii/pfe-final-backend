@@ -27,7 +27,8 @@ public class LeaveType {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(unique = true, nullable = false)
+    /** ID Dolibarr — peut être null pour les types créés localement sans synchronisation. */
+    @Column(unique = true)
     private Long dolibarrLeaveTypeId;
 
     @Column(nullable = false)
