@@ -252,6 +252,47 @@ public class AIService {
         return analysis;
     }
 
+    /**
+     * 🔒 CORRIGÉ: Évalue l'impact d'une demande de congés
+     * Utilise des données réelles au lieu de random()
+     */
+    public Map<String, Object> getImpactScore(Long demandeId) {
+        DemandeConge demande = demandeCongeRepository.findById(demandeId)
+                .orElseThrow(() -> new IllegalArgumentException("Demande non trouvée"));
+
+        Map<String, Object> impact = new HashMap<>();
+
+        // Calcul de l'impact équipe (basé sur absences simultanées)
+        int simultaneousAbsences = (int) demandeCongeRepository.findSimultaneousAbsences(
+                demande.getDateDebut(),
+                demande.getDateFin()
+        ).stream()
+        .filter(d -> !d.getUser().getId().equals(demande.getUser().getId()))
+        .count();
+
+        int teamImpact = Math.min(100, simultaneousAbsences * 25);
+        impact.put("teamImpact", teamImpact);
+
+        // Calcul du risque de continuité (basé sur période critique)
+        boolean critical = isCriticalPeriod(demande.getDateDebut(), demande.getDateFin());
+        int continuityRisk = critical ? 75 : 25;
+        impact.put("continuityRisk", continuityRisk);
+
+        // Charge de travail (simulée)
+        impact.put("workload", "Modéré");
+
+        // Recommandation
+        String recommendation = "APPROUVER";
+        if (teamImpact > 50 || continuityRisk > 70) {
+            recommendation = "REPORTER";
+        } else if (teamImpact > 25) {
+            recommendation = "NÉGOCIER";
+        }
+        impact.put("recommendation", recommendation);
+
+        return impact;
+    }
+
     // =================== MÉTHODES PRIVÉES ===================
 
     /**

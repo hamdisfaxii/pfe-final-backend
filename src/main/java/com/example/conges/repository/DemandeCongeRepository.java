@@ -96,6 +96,12 @@ public interface DemandeCongeRepository extends JpaRepository<DemandeConge, Long
 
     // ============= Méthodes pour l'IA Service =============
 
+    @Query("SELECT d FROM DemandeConge d WHERE d.user.id = :userId AND d.typeConge = :typeConge")
+    List<DemandeConge> findByUserIdAndTypeConge(
+            @Param("userId") Long userId,
+            @Param("typeConge") String typeConge
+    );
+
     @Query("SELECT d FROM DemandeConge d WHERE d.user.id = :userId AND d.statut IN :statuts AND d.dateDebut >= :startDate AND d.dateFin <= :endDate")
     List<DemandeConge> findByUserIdAndStatusAndDateRange(
             @Param("userId") Long userId,

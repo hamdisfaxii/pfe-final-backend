@@ -1683,7 +1683,8 @@ public class DolibarrService {
                             || label.contains("pay")
                             || label.contains("annual")
                             || label.contains("vacan");
-            case COURTE_DUREE -> code.contains("RTT") || label.contains("courte");
+            case COURTE_DUREE -> code.contains("SHORT") || code.contains("COURTE") || label.contains("courte");
+            case RTT -> code.contains("RTT") || label.contains("rtt");
             case MALADIE ->
                     code.contains("MALADIE")
                             || code.contains("SICK")

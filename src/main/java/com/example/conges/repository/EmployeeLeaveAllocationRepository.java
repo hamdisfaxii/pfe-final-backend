@@ -44,4 +44,9 @@ public interface EmployeeLeaveAllocationRepository extends JpaRepository<Employe
     List<EmployeeLeaveAllocation> findByEmployeeIdsAndAnnee(
             @Param("employeeIds") List<Long> employeeIds,
             @Param("annee") Integer annee);
+
+    @Query("SELECT a FROM EmployeeLeaveAllocation a JOIN a.employee e JOIN a.leaveType lt WHERE e.id = :userId AND lt.id = :leaveTypeId")
+    Optional<EmployeeLeaveAllocation> findByUserIdAndLeaveTypeId(
+            @Param("userId") Long userId,
+            @Param("leaveTypeId") String leaveTypeId);
 }
