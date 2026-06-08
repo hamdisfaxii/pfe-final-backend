@@ -148,26 +148,10 @@ public class WorkflowService {
             workflowStepRepository.save(WorkflowStep.builder()
                     .workflowDefinition(definition)
                     .stepOrder(1)
-                    .stepType(com.example.conges.entity.WorkflowStepType.MANAGER_APPROVAL)
-                    .approverRole(Role.RH)
-                    .required(Boolean.TRUE)
-                    .minDays(1)
-                    .build());
-            workflowStepRepository.save(WorkflowStep.builder()
-                    .workflowDefinition(definition)
-                    .stepOrder(2)
                     .stepType(com.example.conges.entity.WorkflowStepType.RH_APPROVAL)
                     .approverRole(Role.RH)
                     .required(Boolean.TRUE)
                     .minDays(1)
-                    .build());
-            workflowStepRepository.save(WorkflowStep.builder()
-                    .workflowDefinition(definition)
-                    .stepOrder(3)
-                    .stepType(com.example.conges.entity.WorkflowStepType.ADMIN_APPROVAL)
-                    .approverRole(Role.RH)
-                    .required(Boolean.TRUE)
-                    .minDays(5)
                     .build());
         }
         return definition;
