@@ -1,4 +1,4 @@
-package com.example.conges.service;
+﻿package com.example.conges.service;
 
 import com.example.conges.dto.CalendarEventResponse;
 import com.example.conges.entity.DemandeConge;
@@ -22,7 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class CalendarService {
 
     private static final Set<Role> CALENDAR_ROLES =
-            EnumSet.of(Role.EMPLOYE, Role.RH, Role.MANAGER, Role.ADMIN);
+            EnumSet.of(Role.EMPLOYE, Role.RH);
 
     private final DemandeCongeRepository demandeCongeRepository;
     private final HolidayRepository holidayRepository;
@@ -48,7 +48,7 @@ public class CalendarService {
             effectiveDepartment = null;
         }
 
-        /* Fériés : filtre pays métier (souvent ISO2). Congés : pour l'employé, l'ID suffit ; u.pays peut être libellé (« France ») et ne pas matcher « FR ». */
+        /* FÃ©riÃ©s : filtre pays mÃ©tier (souvent ISO2). CongÃ©s : pour l'employÃ©, l'ID suffit ; u.pays peut Ãªtre libellÃ© (Â« France Â») et ne pas matcher Â« FR Â». */
         String leaveCountryFilter = actor.getRole() == Role.EMPLOYE ? null : geoCountry;
 
         List<DemandeConge> leaves = demandeCongeRepository.findApprovedForCalendar(
@@ -120,7 +120,7 @@ public class CalendarService {
         }
         Role role = actor.getRole();
         if (role == null || !CALENDAR_ROLES.contains(role)) {
-            throw new AccessDeniedException("Rôle non autorisé pour le calendrier");
+            throw new AccessDeniedException("RÃ´le non autorisÃ© pour le calendrier");
         }
     }
 
@@ -139,7 +139,7 @@ public class CalendarService {
     }
 
     private String resolveCountry(UserEntity actor, String requestedCountry) {
-        if (actor != null && actor.getRole() == Role.ADMIN) {
+        if (actor != null && actor.getRole() == Role.RH) {
             return normalizeOptionalCountry(requestedCountry);
         }
         if (actor == null) {
@@ -153,3 +153,4 @@ public class CalendarService {
         return actorIso;
     }
 }
+

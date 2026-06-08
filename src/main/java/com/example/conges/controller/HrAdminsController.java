@@ -1,4 +1,4 @@
-package com.example.conges.controller;
+﻿package com.example.conges.controller;
 
 import com.example.conges.entity.Role;
 import com.example.conges.entity.UserEntity;
@@ -22,10 +22,10 @@ public class HrAdminsController {
 
     private final UserRepository userRepository;
 
-    /** GET /api/hr/admins — liste des administrateurs RH actifs. */
+    /** GET /api/hr/admins â€” liste des administrateurs RH actifs. */
     @GetMapping
     public ResponseEntity<List<AdminOption>> list() {
-        List<AdminOption> items = userRepository.findByRole(Role.ADMIN).stream()
+        List<AdminOption> items = userRepository.findByRole(Role.RH).stream()
                 .filter(u -> u != null && u.isContractActive())
                 .map(AdminOption::from)
                 .toList();
@@ -49,3 +49,4 @@ public class HrAdminsController {
         }
     }
 }
+

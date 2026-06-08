@@ -1,4 +1,4 @@
-package com.example.conges.controller;
+﻿package com.example.conges.controller;
 
 import com.example.conges.service.StatsService;
 import lombok.RequiredArgsConstructor;
@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.Map;
 
 /**
- * 🔒 CORRIGÉ: Stats isolées par pays (Problème 4 Phase 2)
+ * ðŸ”’ CORRIGÃ‰: Stats isolÃ©es par pays (ProblÃ¨me 4 Phase 2)
  */
 @RestController
 @RequestMapping("/api/stats")
@@ -21,7 +21,7 @@ public class StatsController {
     private final StatsService statsService;
 
     @GetMapping("/country")
-    @PreAuthorize("hasAnyRole('RH', 'ADMIN')")
+    @PreAuthorize("hasRole('RH')")
     public ResponseEntity<Map<String, Object>> getCountryStats(
             @RequestParam String country) {
         Map<String, Object> stats = statsService.getStatsForCountry(country);
@@ -29,9 +29,10 @@ public class StatsController {
     }
 
     @GetMapping("/global")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('RH')")
     public ResponseEntity<Map<String, Object>> getGlobalStats() {
         Map<String, Object> stats = statsService.getGlobalStats();
         return ResponseEntity.ok(stats);
     }
 }
+

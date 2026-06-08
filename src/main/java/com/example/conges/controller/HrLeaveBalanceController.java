@@ -1,4 +1,4 @@
-package com.example.conges.controller;
+﻿package com.example.conges.controller;
 
 import com.example.conges.dto.hr.HrLeaveBalanceDtos;
 import com.example.conges.entity.Role;
@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/hr/balances")
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('RH','ADMIN')")
+@PreAuthorize("hasRole('RH')")
 public class HrLeaveBalanceController {
 
     private final HrLeaveBalanceService hrLeaveBalanceService;
@@ -41,4 +41,5 @@ public class HrLeaveBalanceController {
         return ResponseEntity.ok(java.util.Map.of("success", true));
     }
 }
+
 

@@ -1,4 +1,4 @@
-package com.example.conges.controller;
+﻿package com.example.conges.controller;
 
 import com.example.conges.entity.DemandeAttachment;
 import com.example.conges.entity.DemandeConge;
@@ -102,14 +102,15 @@ public class DemandeAttachmentController {
     private void assertMayAccess(UserEntity actor, DemandeConge demande) {
         if (actor == null) throw new AccessDeniedException("Authentification requise");
         Role r = actor.getRole();
-        boolean staff = r == Role.RH || r == Role.MANAGER || r == Role.ADMIN;
+        boolean staff = r == Role.RH;
         if (staff) return;
         if (demande == null || demande.getUser() == null || demande.getUser().getId() == null) {
-            throw new AccessDeniedException("Accès refusé");
+            throw new AccessDeniedException("AccÃ¨s refusÃ©");
         }
         if (!demande.getUser().getId().equals(actor.getId())) {
-            throw new AccessDeniedException("Accès refusé");
+            throw new AccessDeniedException("AccÃ¨s refusÃ©");
         }
     }
 }
+
 

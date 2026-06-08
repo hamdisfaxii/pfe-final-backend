@@ -1,4 +1,4 @@
-package com.example.conges.service;
+﻿package com.example.conges.service;
 
 import com.example.conges.dto.workflow.WorkflowConfigRequest;
 import com.example.conges.dto.workflow.WorkflowStepConfigRequest;
@@ -43,7 +43,7 @@ public class WorkflowService {
         List<WorkflowStep> steps = workflowStepRepository.findByWorkflowDefinitionIdOrderByStepOrderAsc(definition.getId());
         List<WorkflowStep> applicableSteps = getApplicableSteps(steps, demande);
         if (applicableSteps.isEmpty()) {
-            throw new IllegalStateException("Aucune étape workflow active");
+            throw new IllegalStateException("Aucune Ã©tape workflow active");
         }
 
         WorkflowStep firstStep = applicableSteps.get(0);
@@ -72,12 +72,12 @@ public class WorkflowService {
         WorkflowStep currentStep = applicableSteps.stream()
                 .filter(step -> step.getStepOrder().equals(demande.getCurrentStepOrder()))
                 .findFirst()
-                .orElseThrow(() -> new IllegalStateException("Étape courante workflow introuvable"));
+                .orElseThrow(() -> new IllegalStateException("Ã‰tape courante workflow introuvable"));
 
         if (actor.getRole() != currentStep.getApproverRole()) {
-            // ADMIN peut traiter toutes les étapes (délégation / secours).
-            if (actor.getRole() != Role.ADMIN) {
-                throw new AccessDeniedException("Votre rôle ne peut pas traiter l'étape courante");
+            // ADMIN peut traiter toutes les Ã©tapes (dÃ©lÃ©gation / secours).
+            if (actor.getRole() != Role.RH) {
+                throw new AccessDeniedException("Votre rÃ´le ne peut pas traiter l'Ã©tape courante");
             }
         }
 
@@ -149,7 +149,7 @@ public class WorkflowService {
                     .workflowDefinition(definition)
                     .stepOrder(1)
                     .stepType(com.example.conges.entity.WorkflowStepType.MANAGER_APPROVAL)
-                    .approverRole(Role.MANAGER)
+                    .approverRole(Role.RH)
                     .required(Boolean.TRUE)
                     .minDays(1)
                     .build());
@@ -165,7 +165,7 @@ public class WorkflowService {
                     .workflowDefinition(definition)
                     .stepOrder(3)
                     .stepType(com.example.conges.entity.WorkflowStepType.ADMIN_APPROVAL)
-                    .approverRole(Role.ADMIN)
+                    .approverRole(Role.RH)
                     .required(Boolean.TRUE)
                     .minDays(5)
                     .build());
@@ -249,3 +249,4 @@ public class WorkflowService {
         return scopedTypes == null || scopedTypes.isEmpty() || scopedTypes.contains(demande.getTypeConge());
     }
 }
+

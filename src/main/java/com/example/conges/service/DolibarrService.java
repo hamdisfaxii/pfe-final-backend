@@ -265,20 +265,11 @@ public class DolibarrService {
      * « Approuvé par ».
      */
     private Role resolveRole(UserEntity existingUser, DolibarrEmployeeDto dolibarrUser, String email) {
-        if (existingUser != null
-                && existingUser.getRole() != null
-                && existingUser.getRole() != Role.EMPLOYE) {
-            // Si un rôle RH/ADMIN local a déjà été validé, on le conserve.
-            return existingUser.getRole();
+        // Conserver le rôle RH si déjà assigné localement
+        if (existingUser != null && existingUser.getRole() == Role.RH) {
+            return Role.RH;
         }
-        if (dolibarrUser != null && dolibarrUser.isAdminLike()) {
-            return Role.ADMIN;
-        }
-        String login = dolibarrUser == null ? "" : String.valueOf(dolibarrUser.getLogin()).toLowerCase(Locale.ROOT);
-        String normalizedEmail = email == null ? "" : email.toLowerCase(Locale.ROOT);
-        if (login.contains("admin") || normalizedEmail.contains("admin")) {
-            return Role.ADMIN;
-        }
+        // Par défaut: EMPLOYE
         return Role.EMPLOYE;
     }
 

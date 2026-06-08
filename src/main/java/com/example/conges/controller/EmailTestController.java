@@ -1,4 +1,4 @@
-package com.example.conges.controller;
+﻿package com.example.conges.controller;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/test")
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('RH','ADMIN')")
+@PreAuthorize("hasRole('RH')")
 public class EmailTestController {
 
     private final JavaMailSender mailSender;
@@ -51,8 +51,8 @@ public class EmailTestController {
             SimpleMailMessage message = new SimpleMailMessage();
             message.setFrom(fromEmail);
             message.setTo(request.getTo());
-            message.setSubject(request.getSubject() != null ? request.getSubject() : "Test Email - Gestion des Congés");
-            message.setText(request.getMessage() != null ? request.getMessage() : "Email de test du système Gestion des Congés");
+            message.setSubject(request.getSubject() != null ? request.getSubject() : "Test Email - Gestion des CongÃ©s");
+            message.setText(request.getMessage() != null ? request.getMessage() : "Email de test du systÃ¨me Gestion des CongÃ©s");
             mailSender.send(message);
             response.put("status", "sent");
             response.put("recipient", request.getTo());
@@ -83,3 +83,4 @@ public class EmailTestController {
         public void setMessage(String message) { this.message = message; }
     }
 }
+

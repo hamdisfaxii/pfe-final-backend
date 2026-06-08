@@ -1,4 +1,4 @@
-package com.example.conges.controller;
+﻿package com.example.conges.controller;
 
 import com.example.conges.config.AppConstants;
 import com.example.conges.dto.ai.DateSuggestionDto;
@@ -30,7 +30,7 @@ import java.util.Map;
 @RequestMapping("/api/ai")
 @RequiredArgsConstructor
 @Slf4j
-@Tag(name = "AI Services", description = "Services IA pour suggestions intelligentes et détection de conflits")
+@Tag(name = "AI Services", description = "Services IA pour suggestions intelligentes et dÃ©tection de conflits")
 public class AIController {
 
     private final AIService aiService;
@@ -38,22 +38,22 @@ public class AIController {
 
     @GetMapping("/suggest-dates")
     @PreAuthorize("isAuthenticated()")
-    @Operation(summary = "Suggère les meilleures dates pour un congé",
-               description = "Utilise un algorithme intelligent pour proposer les 5 meilleures périodes")
+    @Operation(summary = "SuggÃ¨re les meilleures dates pour un congÃ©",
+               description = "Utilise un algorithme intelligent pour proposer les 5 meilleures pÃ©riodes")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Liste des suggestions de dates"),
-        @ApiResponse(responseCode = "401", description = "Non authentifié"),
-        @ApiResponse(responseCode = "403", description = "Accès refusé"),
-        @ApiResponse(responseCode = "400", description = "Paramètres invalides")
+        @ApiResponse(responseCode = "401", description = "Non authentifiÃ©"),
+        @ApiResponse(responseCode = "403", description = "AccÃ¨s refusÃ©"),
+        @ApiResponse(responseCode = "400", description = "ParamÃ¨tres invalides")
     })
     public ResponseEntity<List<DateSuggestionDto>> suggestOptimalDates(
             @RequestParam TypeConge typeConge,
-            @RequestParam(defaultValue = "5") @Parameter(description = "Nombre de jours demandés") int days,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) @Parameter(description = "Date de début (ISO format)") LocalDate startDate,
+            @RequestParam(defaultValue = "5") @Parameter(description = "Nombre de jours demandÃ©s") int days,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) @Parameter(description = "Date de dÃ©but (ISO format)") LocalDate startDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) @Parameter(description = "Date de fin (ISO format)") LocalDate endDate,
             Authentication authentication) {
 
-        // Récupérer l'utilisateur authentifié (pas depuis le paramètre!)
+        // RÃ©cupÃ©rer l'utilisateur authentifiÃ© (pas depuis le paramÃ¨tre!)
         UserEntity currentUser = userRepository.findByEmail(authentication.getName())
                 .orElseThrow(() -> new IllegalArgumentException(AppConstants.USER_NOT_FOUND));
 
@@ -75,11 +75,11 @@ public class AIController {
 
     @GetMapping("/detect-conflicts")
     @PreAuthorize("isAuthenticated()")
-    @Operation(summary = "Détecte les conflits d'absences potentiels",
-               description = "Analyse les conflits simultanés, périodes critiques et charge RH")
+    @Operation(summary = "DÃ©tecte les conflits d'absences potentiels",
+               description = "Analyse les conflits simultanÃ©s, pÃ©riodes critiques et charge RH")
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Résultats de la détection de conflits"),
-        @ApiResponse(responseCode = "401", description = "Non authentifié")
+        @ApiResponse(responseCode = "200", description = "RÃ©sultats de la dÃ©tection de conflits"),
+        @ApiResponse(responseCode = "401", description = "Non authentifiÃ©")
     })
     public ResponseEntity<ConflictDetectionDto> detectConflicts(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
@@ -87,11 +87,11 @@ public class AIController {
             @RequestParam TypeConge typeConge,
             Authentication authentication) {
 
-        // 🔒 Utiliser l'utilisateur authentifié (pas depuis le paramètre!)
+        // ðŸ”’ Utiliser l'utilisateur authentifiÃ© (pas depuis le paramÃ¨tre!)
         UserEntity currentUser = userRepository.findByEmail(authentication.getName())
                 .orElseThrow(() -> new IllegalArgumentException(AppConstants.USER_NOT_FOUND));
 
-        log.info("Détection de conflits pour l'utilisateur {} : {} à {}", currentUser.getId(), startDate, endDate);
+        log.info("DÃ©tection de conflits pour l'utilisateur {} : {} Ã  {}", currentUser.getId(), startDate, endDate);
 
         ConflictDetectionDto detection = aiService.detectConflicts(
                 currentUser.getId(),
@@ -104,14 +104,14 @@ public class AIController {
     }
 
     @GetMapping("/predict-trends")
-    @PreAuthorize("hasAnyRole('RH', 'ADMIN')")
-    @Operation(summary = "Prédit les tendances d'absences",
+    @PreAuthorize("hasRole('RH')")
+    @Operation(summary = "PrÃ©dit les tendances d'absences",
                description = "Analyse les tendances sur les 3 prochains mois et identifie les pics")
-    @ApiResponse(responseCode = "200", description = "Prédictions des tendances")
+    @ApiResponse(responseCode = "200", description = "PrÃ©dictions des tendances")
     public ResponseEntity<Map<String, Object>> predictAbsenceTrends(
             @RequestParam String pays) {
 
-        log.info("Prédiction des tendances d'absences pour le pays {}", pays);
+        log.info("PrÃ©diction des tendances d'absences pour le pays {}", pays);
         
         Map<String, Object> prediction = aiService.predictAbsenceTrends(pays);
         
@@ -120,17 +120,17 @@ public class AIController {
 
     @GetMapping("/analyze-balance")
     @PreAuthorize("isAuthenticated()")
-    @Operation(summary = "Analyse le solde de congés",
+    @Operation(summary = "Analyse le solde de congÃ©s",
                description = "Fournit une analyse du solde actuel et des recommandations")
     @ApiResponse(responseCode = "200", description = "Analyse du solde")
     public ResponseEntity<Map<String, Object>> analyzeLeaveBalance(
             Authentication authentication) {
 
-        // Récupérer l'utilisateur authentifié (pas depuis le paramètre!)
+        // RÃ©cupÃ©rer l'utilisateur authentifiÃ© (pas depuis le paramÃ¨tre!)
         UserEntity currentUser = userRepository.findByEmail(authentication.getName())
                 .orElseThrow(() -> new IllegalArgumentException(AppConstants.USER_NOT_FOUND));
 
-        log.info("Analyse du solde de congés pour l'utilisateur {}", currentUser.getId());
+        log.info("Analyse du solde de congÃ©s pour l'utilisateur {}", currentUser.getId());
 
         Map<String, Object> analysis = aiService.analyzeLeaveBalance(currentUser.getId());
 
@@ -139,8 +139,8 @@ public class AIController {
 
     @GetMapping("/impact-score")
     @PreAuthorize("isAuthenticated()")
-    @Operation(summary = "Évalue l'impact d'une demande de congés",
-               description = "Fournit une analyse de l'impact équipe, continuité et recommandation")
+    @Operation(summary = "Ã‰value l'impact d'une demande de congÃ©s",
+               description = "Fournit une analyse de l'impact Ã©quipe, continuitÃ© et recommandation")
     @ApiResponse(responseCode = "200", description = "Score d'impact avec recommandation")
     public ResponseEntity<Map<String, Object>> getImpactScore(
             @RequestParam Long demandeId,
@@ -156,4 +156,5 @@ public class AIController {
         return ResponseEntity.ok(impact);
     }
 }
+
 

@@ -66,7 +66,7 @@ public class CongeController {
             @RequestParam(required = false) Integer annee,
             @RequestParam(required = false) String statut) {
 
-        boolean isRh = user.getRole() == Role.RH || user.getRole() == Role.ADMIN;
+        boolean isRh = user.getRole() == Role.RH;
         List<DemandeCongeResponse> demandes = isRh
                 ? congeService.getAllDemandesEnAttente()
                 : congeService.getMesDemandesFiltrees(user.getId(), annee, statut);
@@ -102,7 +102,7 @@ public class CongeController {
 
     /** PUT /api/conge/{id}/valider — validation RH d'une demande. */
     @PutMapping("/{id}/valider")
-    @PreAuthorize("hasRole('RH') or hasRole('ADMIN')")
+    @PreAuthorize("hasRole('RH')")
     public ResponseEntity<DemandeCongeResponse> validerDemande(
             @PathVariable Long id,
             @AuthenticationPrincipal UserEntity rh,
@@ -138,7 +138,7 @@ public class CongeController {
 
     /** GET /api/conge/stats — statistiques RH (réservé RH/Admin). */
     @GetMapping("/stats")
-    @PreAuthorize("hasRole('RH') or hasRole('ADMIN')")
+    @PreAuthorize("hasRole('RH')")
     public ResponseEntity<Map<String, Object>> getStats() {
         StatistiquesRhResponse stats = congeService.getStatistiquesRh();
         Map<StatutConge, Long> parStatut = stats.getNombreParStatut();

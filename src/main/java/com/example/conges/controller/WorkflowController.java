@@ -1,4 +1,4 @@
-package com.example.conges.controller;
+﻿package com.example.conges.controller;
 
 import com.example.conges.dto.workflow.WorkflowConfigRequest;
 import com.example.conges.entity.DemandeApproval;
@@ -29,21 +29,22 @@ public class WorkflowController {
     private final WorkflowService workflowService;
 
     @PostMapping("/definitions")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('RH')")
     public ResponseEntity<WorkflowDefinition> upsertWorkflow(@Valid @RequestBody WorkflowConfigRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(workflowService.upsertWorkflow(request));
     }
 
     @GetMapping("/pending")
-    @PreAuthorize("hasAnyRole('MANAGER','RH','ADMIN')")
+    @PreAuthorize("hasRole('RH')")
     public ResponseEntity<List<DemandeConge>> pendingForRole(@AuthenticationPrincipal UserEntity user) {
         Role role = user.getRole();
         return ResponseEntity.ok(workflowService.getPendingForActorRole(role));
     }
 
     @GetMapping("/demandes/{demandeId}/approvals")
-    @PreAuthorize("hasAnyRole('MANAGER','RH','ADMIN')")
+    @PreAuthorize("hasRole('RH')")
     public ResponseEntity<List<DemandeApproval>> getApprovals(@PathVariable Long demandeId) {
         return ResponseEntity.ok(workflowService.getApprovals(demandeId));
     }
 }
+

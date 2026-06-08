@@ -1,4 +1,4 @@
-package com.example.conges.service;
+﻿package com.example.conges.service;
 
 import com.example.conges.dto.DemandeCongeResponse;
 import com.example.conges.dto.hr.HrDecisionRequest;
@@ -53,7 +53,7 @@ public class HrDecisionService {
     }
 
     /**
-     * Historique RH filtrable (tous statuts ou PENDING/APPROVED/REJECTED côté API).
+     * Historique RH filtrable (tous statuts ou PENDING/APPROVED/REJECTED cÃ´tÃ© API).
      */
     @Transactional(readOnly = true)
     public List<HrLeaveRequestResponse> getHistoryRequests(
@@ -78,7 +78,7 @@ public class HrDecisionService {
         ).stream().map(this::toHrResponse).toList();
     }
 
-    /** null = tous statuts ; accepte synonymes envoyés par le front React. */
+    /** null = tous statuts ; accepte synonymes envoyÃ©s par le front React. */
     private StatutConge parseApiStatus(String status) {
         if (status == null || status.isBlank()) {
             return null;
@@ -130,23 +130,23 @@ public class HrDecisionService {
     public Map<String, Long> getStats(UserEntity actor) {
         validateHrOrAdmin(actor);
         String actorCountry = normalizeBusinessCountryOptional(actor.getPays());
-        if (actor.getRole() != Role.ADMIN && actorCountry == null) {
+        if (actor.getRole() != Role.RH && actorCountry == null) {
             throw new AccessDeniedException("Pays utilisateur introuvable.");
         }
         Map<String, Long> stats = new HashMap<>();
-        long pending = actor.getRole() == Role.ADMIN
+        long pending = actor.getRole() == Role.RH
                 ? demandeCongeRepository.countByStatut(com.example.conges.entity.StatutConge.EN_ATTENTE)
                 : demandeCongeRepository.countByStatutAndUser_PaysIgnoreCase(
                         com.example.conges.entity.StatutConge.EN_ATTENTE,
                         actorCountry
                 );
-        long approved = actor.getRole() == Role.ADMIN
+        long approved = actor.getRole() == Role.RH
                 ? demandeCongeRepository.countByStatut(com.example.conges.entity.StatutConge.ACCEPTE)
                 : demandeCongeRepository.countByStatutAndUser_PaysIgnoreCase(
                         com.example.conges.entity.StatutConge.ACCEPTE,
                         actorCountry
                 );
-        long rejected = actor.getRole() == Role.ADMIN
+        long rejected = actor.getRole() == Role.RH
                 ? demandeCongeRepository.countByStatut(com.example.conges.entity.StatutConge.REFUSE)
                 : demandeCongeRepository.countByStatutAndUser_PaysIgnoreCase(
                         com.example.conges.entity.StatutConge.REFUSE,
@@ -178,16 +178,13 @@ public class HrDecisionService {
     }
 
     private void validateHrOrAdmin(UserEntity actor) {
-        if (actor == null
-                || (actor.getRole() != Role.RH
-                    && actor.getRole() != Role.ADMIN
-                    && actor.getRole() != Role.MANAGER)) {
-            throw new AccessDeniedException("Accès réservé aux rôles RH/ADMIN/MANAGER");
+        if (actor == null || actor.getRole() != Role.RH) {
+            throw new AccessDeniedException("Accès réservé aux rôles RH");
         }
     }
 
     private String resolveCountryFilter(UserEntity actor, String requestedCountry) {
-        if (actor.getRole() == Role.ADMIN) {
+        if (actor.getRole() == Role.RH) {
             return normalizeOptional(requestedCountry);
         }
         String actorCountry = normalizeBusinessCountryOptional(actor.getPays());
@@ -198,14 +195,14 @@ public class HrDecisionService {
     }
 
     private void enforceCountryAccess(UserEntity actor, DemandeConge demande) {
-        if (actor.getRole() == Role.ADMIN) {
+        if (actor.getRole() == Role.RH) {
             return;
         }
         String actorCountry = normalizeBusinessCountryOptional(actor.getPays());
         String requestCountry =
                 demande.getUser() == null ? null : normalizeBusinessCountryOptional(demande.getUser().getPays());
         if (actorCountry == null || requestCountry == null || !actorCountry.equalsIgnoreCase(requestCountry)) {
-            throw new AccessDeniedException("Accès refusé: demande d'un autre pays.");
+            throw new AccessDeniedException("AccÃ¨s refusÃ©: demande d'un autre pays.");
         }
     }
 
@@ -274,3 +271,4 @@ public class HrDecisionService {
                 .build();
     }
 }
+

@@ -1,4 +1,4 @@
-package com.example.conges.controller;
+﻿package com.example.conges.controller;
 
 import com.example.conges.dto.config.CountryPolicyConfigRequest;
 import com.example.conges.dto.config.EmployeeContractRhPatchRequest;
@@ -43,7 +43,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/hr-config")
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('RH','ADMIN')")
+@PreAuthorize("hasRole('RH')")
 public class HrConfigController {
 
     private final CountryPolicyService countryPolicyService;
@@ -289,7 +289,7 @@ public class HrConfigController {
     }
 
     private String resolveCountry(UserEntity user, String requestedCountry) {
-        if (user != null && user.getRole() == Role.ADMIN && requestedCountry != null && !requestedCountry.isBlank()) {
+        if (user != null && user.getRole() == Role.RH && requestedCountry != null && !requestedCountry.isBlank()) {
             return requestedCountry.trim().toUpperCase();
         }
         String userCountry = user == null ? null : user.getPays();
@@ -299,3 +299,5 @@ public class HrConfigController {
         return userCountry.trim().toUpperCase();
     }
 }
+
+

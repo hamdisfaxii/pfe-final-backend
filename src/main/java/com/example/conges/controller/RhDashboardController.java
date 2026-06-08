@@ -1,4 +1,4 @@
-package com.example.conges.controller;
+﻿package com.example.conges.controller;
 
 import com.example.conges.dto.RhDashboardResponse;
 import com.example.conges.service.RhDashboardService;
@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/rh")
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('RH','ADMIN','MANAGER')")
+@PreAuthorize("hasRole('RH')")
 public class RhDashboardController {
 
     private final RhDashboardService rhDashboardService;
@@ -22,3 +22,4 @@ public class RhDashboardController {
         return ResponseEntity.ok(rhDashboardService.getDashboardComplet());
     }
 }
+

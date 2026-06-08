@@ -1,4 +1,4 @@
-package com.example.conges.controller;
+﻿package com.example.conges.controller;
 
 import com.example.conges.dto.HistoryResponse;
 import com.example.conges.entity.History;
@@ -32,7 +32,7 @@ import java.util.Map;
 
 /**
  * Controller REST pour la gestion de l'historique des actions
- * Endpoints pour consultation, filtrage et export des données.
+ * Endpoints pour consultation, filtrage et export des donnÃ©es.
  */
 @RestController
 @RequestMapping("/api/history")
@@ -47,21 +47,21 @@ public class HistoryController {
 
     /**
      * GET /api/history
-     * Récupère l'historique avec filtres et pagination
+     * RÃ©cupÃ¨re l'historique avec filtres et pagination
      * 
      * Params optionnels:
      * - userId: filtrer par utilisateur
-     * - demandeId: filtrer par demande de congé
+     * - demandeId: filtrer par demande de congÃ©
      * - actionType: filtrer par type d'action
      * - pays: filtrer par pays
-     * - startDate: date de début (ISO format)
+     * - startDate: date de dÃ©but (ISO format)
      * - endDate: date de fin (ISO format)
-     * - page: numéro de page (défaut 0)
-     * - size: taille de page (défaut 20)
-     * - sort: tri (défaut actionDate,desc)
+     * - page: numÃ©ro de page (dÃ©faut 0)
+     * - size: taille de page (dÃ©faut 20)
+     * - sort: tri (dÃ©faut actionDate,desc)
      */
     @GetMapping
-    @PreAuthorize("hasAnyRole('RH', 'ADMIN')")
+    @PreAuthorize("hasRole('RH')")
     public ResponseEntity<Page<HistoryResponse>> getHistory(
             @RequestParam(required = false) Long userId,
             @RequestParam(required = false) Long demandeId,
@@ -86,13 +86,13 @@ public class HistoryController {
         Page<History> result = historyService.getHistory(userId, demandeId, actionType, pays, startDate, endDate, pageable);
         Page<HistoryResponse> response = result.map(historyMapper::toResponse);
         
-        log.info("Historique consulté - {} records trouvés", result.getTotalElements());
+        log.info("Historique consultÃ© - {} records trouvÃ©s", result.getTotalElements());
         return ResponseEntity.ok(response);
     }
 
     /**
      * GET /api/history/user/:userId
-     * Récupère l'historique d'un utilisateur spécifique
+     * RÃ©cupÃ¨re l'historique d'un utilisateur spÃ©cifique
      */
     @GetMapping("/user/{userId}")
     @PreAuthorize("hasAnyRole('RH', 'ADMIN') or #userId == principal.id")
@@ -110,7 +110,7 @@ public class HistoryController {
 
     /**
      * GET /api/history/demande/:demandeId
-     * Récupère l'historique d'une demande de congé spécifique
+     * RÃ©cupÃ¨re l'historique d'une demande de congÃ© spÃ©cifique
      */
     @GetMapping("/demande/{demandeId}")
     @PreAuthorize("hasAnyRole('RH', 'ADMIN', 'EMPLOYEE')")
@@ -128,10 +128,10 @@ public class HistoryController {
 
     /**
      * GET /api/history/statistics
-     * Récupère les statistiques sur les actions enregistrées
+     * RÃ©cupÃ¨re les statistiques sur les actions enregistrÃ©es
      */
     @GetMapping("/statistics")
-    @PreAuthorize("hasAnyRole('RH', 'ADMIN')")
+    @PreAuthorize("hasRole('RH')")
     public ResponseEntity<Map<ActionType, Long>> getStatistics() {
         Map<ActionType, Long> stats = historyService.getActionStatistics();
         return ResponseEntity.ok(stats);
@@ -141,10 +141,10 @@ public class HistoryController {
      * GET /api/history/export/pdf
      * Exporte l'historique au format PDF
      * 
-     * Query params: mêmes que /api/history pour le filtrage
+     * Query params: mÃªmes que /api/history pour le filtrage
      */
     @GetMapping("/export/pdf")
-    @PreAuthorize("hasAnyRole('RH', 'ADMIN')")
+    @PreAuthorize("hasRole('RH')")
     public ResponseEntity<byte[]> exportHistoryPdf(
             @RequestParam(required = false) Long userId,
             @RequestParam(required = false) Long demandeId,
@@ -160,10 +160,10 @@ public class HistoryController {
 
             byte[] pdfBytes = pdfExportService.generateHistoryReport(
                     historyList,
-                    "Rapport Historique - Gestion des Congés"
+                    "Rapport Historique - Gestion des CongÃ©s"
             );
 
-            log.info("Rapport PDF généré - {} records", historyList.size());
+            log.info("Rapport PDF gÃ©nÃ©rÃ© - {} records", historyList.size());
 
             return ResponseEntity.ok()
                     .header(HttpHeaders.CONTENT_DISPOSITION, 
@@ -172,7 +172,7 @@ public class HistoryController {
                     .body(pdfBytes);
 
         } catch (IOException e) {
-            log.error("Erreur lors de la génération du PDF", e);
+            log.error("Erreur lors de la gÃ©nÃ©ration du PDF", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
@@ -181,10 +181,10 @@ public class HistoryController {
      * GET /api/history/export/excel
      * Exporte l'historique au format Excel
      * 
-     * Query params: mêmes que /api/history pour le filtrage
+     * Query params: mÃªmes que /api/history pour le filtrage
      */
     @GetMapping("/export/excel")
-    @PreAuthorize("hasAnyRole('RH', 'ADMIN')")
+    @PreAuthorize("hasRole('RH')")
     public ResponseEntity<byte[]> exportHistoryExcel(
             @RequestParam(required = false) Long userId,
             @RequestParam(required = false) Long demandeId,
@@ -203,7 +203,7 @@ public class HistoryController {
                     "Historique"
             );
 
-            log.info("Rapport Excel généré - {} records", historyList.size());
+            log.info("Rapport Excel gÃ©nÃ©rÃ© - {} records", historyList.size());
 
             return ResponseEntity.ok()
                     .header(HttpHeaders.CONTENT_DISPOSITION,
@@ -213,17 +213,17 @@ public class HistoryController {
                     .body(excelBytes);
 
         } catch (IOException e) {
-            log.error("Erreur lors de la génération du Excel", e);
+            log.error("Erreur lors de la gÃ©nÃ©ration du Excel", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
 
     /**
      * GET /api/history/export/rh-report
-     * Exporte un rapport RH spécifique (Excel)
+     * Exporte un rapport RH spÃ©cifique (Excel)
      */
     @GetMapping("/export/rh-report")
-    @PreAuthorize("hasAnyRole('RH', 'ADMIN')")
+    @PreAuthorize("hasRole('RH')")
     public ResponseEntity<byte[]> exportRhReport(
             @RequestParam(required = false) String pays,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startDate,
@@ -236,7 +236,7 @@ public class HistoryController {
 
             byte[] excelBytes = excelExportService.generateRhReport(historyList);
 
-            log.info("Rapport RH généré - {} records", historyList.size());
+            log.info("Rapport RH gÃ©nÃ©rÃ© - {} records", historyList.size());
 
             return ResponseEntity.ok()
                     .header(HttpHeaders.CONTENT_DISPOSITION,
@@ -246,8 +246,9 @@ public class HistoryController {
                     .body(excelBytes);
 
         } catch (IOException e) {
-            log.error("Erreur lors de la génération du rapport RH", e);
+            log.error("Erreur lors de la gÃ©nÃ©ration du rapport RH", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
 }
+
