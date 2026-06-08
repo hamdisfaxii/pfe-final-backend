@@ -23,7 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Initialise les données par défaut au démarrage :
- * - Utilisateurs admin/RH/employé de test avec mots de passe locaux
+ * - Utilisateurs RH/employé de test avec mots de passe locaux
  * - Types de congés standards
  * - Allocations par défaut pour les utilisateurs existants sans allocation
  */
@@ -86,9 +86,7 @@ public class DataInitializer implements ApplicationRunner {
     }
 
     private void seedDefaultUsers() {
-        createUserIfAbsent("admin@conges.local",   "Admin",   "Super",   Role.ADMIN,   "TN", "admin123");
-        createUserIfAbsent("rh@conges.local",      "RH",      "Gestionnaire", Role.RH, "TN", "rh123");
-        createUserIfAbsent("manager@conges.local", "Manager", "Chef",    Role.MANAGER, "TN", "manager123");
+        createUserIfAbsent("rh@conges.local",      "Martin",  "Marie",   Role.RH,      "TN", "rh123");
         createUserIfAbsent("employe@conges.local", "Dupont",  "Jean",    Role.EMPLOYE, "TN", "employe123");
         createUserIfAbsent("employe.fr@conges.local","Martin","Sophie",  Role.EMPLOYE, "FR", "employe123");
         createUserIfAbsent("employe.ma@conges.local","Benali", "Youssef",Role.EMPLOYE, "MA", "employe123");

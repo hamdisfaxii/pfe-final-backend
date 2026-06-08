@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS users (
     email               VARCHAR(255) NOT NULL UNIQUE,
     nom                 VARCHAR(255),
     prenom              VARCHAR(255),
-    role                VARCHAR(32)  NOT NULL COMMENT 'EMPLOYE|RH|MANAGER|ADMIN',
+    role                VARCHAR(32)  NOT NULL COMMENT 'EMPLOYE|RH',
     pays                VARCHAR(100),
     country_code        VARCHAR(8),
     weekly_hours        DECIMAL(5,2),
@@ -160,8 +160,8 @@ CREATE TABLE IF NOT EXISTS workflow_steps (
     id                      BIGINT AUTO_INCREMENT PRIMARY KEY,
     workflow_definition_id  BIGINT NOT NULL,
     step_order              INT    NOT NULL,
-    step_type               VARCHAR(50) NOT NULL COMMENT 'MANAGER_APPROVAL|RH_APPROVAL|ADMIN_APPROVAL',
-    approver_role           VARCHAR(20) NOT NULL COMMENT 'EMPLOYE|RH|MANAGER|ADMIN',
+    step_type               VARCHAR(50) NOT NULL COMMENT 'RH_APPROVAL',
+    approver_role           VARCHAR(20) NOT NULL COMMENT 'RH',
     required                BOOLEAN NOT NULL DEFAULT TRUE,
     min_days                INT,
     max_days                INT,
@@ -340,8 +340,7 @@ INSERT IGNORE INTO france_rtt_settings (id, accrual_mode, admin_override_days, u
 -- rh123     = $2a$10$8.IXcbS5aPKhcqMwXSz7CeYsHpYh.aOBlPcCjV1Yk4Y/p/Bg/ZXwm
 -- employe123= $2a$10$wnkPc1y6kRbEZW9KU99mFONQ/lBW1X37hYpsTz7mU9SaqEkx1.1qO
 INSERT IGNORE INTO users (email, nom, prenom, role, pays, password_hash, contract_active, contract_type, annual_work_days, weekly_hours, hire_date, created_at, updated_at) VALUES
-('admin@conges.local',    'Admin',    'Super',      'ADMIN',   'TN', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', TRUE, 'CDI', 218, 40.0, '2023-01-01', NOW(), NOW()),
-('rh@conges.local',       'RH',       'Gestionnaire','RH',     'TN', '$2a$10$8.IXcbS5aPKhcqMwXSz7CeYsHpYh.aOBlPcCjV1Yk4Y/p/Bg/ZXwm', TRUE, 'CDI', 218, 40.0, '2023-01-01', NOW(), NOW()),
+('rh@conges.local',       'Martin',   'Marie',      'RH',      'TN', '$2a$10$8.IXcbS5aPKhcqMwXSz7CeYsHpYh.aOBlPcCjV1Yk4Y/p/Bg/ZXwm', TRUE, 'CDI', 218, 40.0, '2023-01-01', NOW(), NOW()),
 ('employe@conges.local',  'Dupont',   'Jean',       'EMPLOYE', 'TN', '$2a$10$wnkPc1y6kRbEZW9KU99mFONQ/lBW1X37hYpsTz7mU9SaqEkx1.1qO', TRUE, 'CDI', 218, 40.0, '2023-01-01', NOW(), NOW()),
 ('employe.fr@conges.local','Martin',  'Sophie',     'EMPLOYE', 'FR', '$2a$10$wnkPc1y6kRbEZW9KU99mFONQ/lBW1X37hYpsTz7mU9SaqEkx1.1qO', TRUE, 'CDI', 218, 35.0, '2023-01-01', NOW(), NOW()),
 ('employe.ma@conges.local','Benali',  'Youssef',    'EMPLOYE', 'MA', '$2a$10$wnkPc1y6kRbEZW9KU99mFONQ/lBW1X37hYpsTz7mU9SaqEkx1.1qO', TRUE, 'CDI', 218, 40.0, '2023-01-01', NOW(), NOW());

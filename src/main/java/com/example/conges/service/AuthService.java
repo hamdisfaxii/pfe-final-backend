@@ -129,7 +129,7 @@ public class AuthService {
                     return null;
                 });
 
-        Role role = resolveRole(user, dolibarrUser, credential);
+        Role role = resolveRole(user);
         String nom = dolibarrUser.getLastName();
         String prenom = dolibarrUser.getFirstName();
         String paysRH = dolibarrService.resolveSupportedHrCountryIso2(
@@ -172,26 +172,13 @@ public class AuthService {
                 .build();
     }
 
-    private Role resolveRole(UserEntity existingUser, DolibarrEmployeeDto dolibarrUser, String credential) {
-        // RH et MANAGER sont assignés manuellement en local — toujours préserver
-        if (existingUser != null) {
-            Role r = existingUser.getRole();
-            if (r == Role.RH || r == Role.MANAGER) {
-                return r;
-            }
+    private Role resolveRole(UserEntity existingUser) {
+        // RH assignés manuellement en local — toujours préserver
+        if (existingUser != null && existingUser.getRole() == Role.RH) {
+            return Role.RH;
         }
 
-        // Admin : se base uniquement sur le flag Dolibarr (évite de conserver un ADMIN corrompu)
-        if (dolibarrUser != null && dolibarrUser.isAdminLike()) {
-            return Role.ADMIN;
-        }
-
-        // Heuristique login Dolibarr (ex. compte nommé "admin")
-        String login = dolibarrUser == null ? "" : String.valueOf(dolibarrUser.getLogin()).toLowerCase();
-        if (login.contains("admin")) {
-            return Role.ADMIN;
-        }
-
+        // Par défaut: EMPLOYE
         return Role.EMPLOYE;
     }
 
