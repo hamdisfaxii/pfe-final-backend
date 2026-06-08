@@ -116,10 +116,11 @@ public class DataInitializer implements ApplicationRunner {
     }
 
     private void seedMissingAllocations() {
-        int year = Year.now().getValue();
-        List<UserEntity> users = userRepository.findAll();
+        try {
+            int year = Year.now().getValue();
+            List<UserEntity> users = userRepository.findAll();
 
-        for (UserEntity user : users) {
+            for (UserEntity user : users) {
             String pays = user.getPays() == null ? "TN" : user.getPays().trim().toUpperCase();
             if (!COUNTRY_QUOTAS.containsKey(pays)) {
                 pays = "TN";
@@ -154,6 +155,9 @@ public class DataInitializer implements ApplicationRunner {
                 allocationRepository.save(alloc);
             }
             log.info("  → Allocations créées pour {} (pays={})", user.getEmail(), pays);
+            }
+        } catch (Exception e) {
+            log.warn("⚠️  Erreur lors de la création des allocations (données obsolètes?): {}", e.getMessage());
         }
     }
 
