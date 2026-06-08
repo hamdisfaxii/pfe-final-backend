@@ -86,10 +86,12 @@ public class DataInitializer implements ApplicationRunner {
     }
 
     private void seedDefaultUsers() {
-        createUserIfAbsent("rh@conges.local",      "Martin",  "Marie",   Role.RH,      "TN", "rh123");
-        createUserIfAbsent("employe@conges.local", "Dupont",  "Jean",    Role.EMPLOYE, "TN", "employe123");
-        createUserIfAbsent("employe.fr@conges.local","Martin","Sophie",  Role.EMPLOYE, "FR", "employe123");
-        createUserIfAbsent("employe.ma@conges.local","Benali", "Youssef",Role.EMPLOYE, "MA", "employe123");
+        createUserIfAbsent("admin@conges.local",   "Admin",    "Super",      Role.ADMIN,   "TN", "admin123");
+        createUserIfAbsent("rh@conges.local",      "RH",       "Gestionnaire", Role.RH, "TN", "rh123");
+        createUserIfAbsent("manager@conges.local", "Manager",  "Chef",       Role.MANAGER, "TN", "manager123");
+        createUserIfAbsent("employe@conges.local", "Dupont",   "Jean",       Role.EMPLOYE, "TN", "employe123");
+        createUserIfAbsent("employe.fr@conges.local","Martin", "Sophie",    Role.EMPLOYE, "FR", "employe123");
+        createUserIfAbsent("employe.ma@conges.local","Benali", "Youssef",   Role.EMPLOYE, "MA", "employe123");
     }
 
     private void createUserIfAbsent(String email, String nom, String prenom, Role role, String pays, String rawPassword) {

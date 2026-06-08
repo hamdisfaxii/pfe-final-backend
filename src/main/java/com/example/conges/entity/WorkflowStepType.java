@@ -1,5 +1,7 @@
 package com.example.conges.entity;
 
 public enum WorkflowStepType {
-    RH_APPROVAL
+    MANAGER_APPROVAL,
+    RH_APPROVAL,
+    ADMIN_APPROVAL
 }
